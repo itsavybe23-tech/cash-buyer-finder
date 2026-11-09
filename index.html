@@ -666,7 +666,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
 		}
 	}
 
-.fl-status{display:block;margin-top:2px}.fl-status.ok{color:var(--ok, var(--fg))}.fl-status.bad{color:var(--bad, #d64545)}.fl-status.warn{color:var(--warn, #b7791f)}
+.fl-status{display:block;margin-top:2px}.upd-bar{position:sticky;z-index:5;background:var(--panel);padding:8px 0;display:flex;flex-direction:column;gap:4px}.rail>.upd-bar{top:-14px}.criteria>.upd-bar{bottom:-16px;border-top:1px solid var(--line)}.btn.upd{justify-content:center;width:100%}.btn.upd.pending{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 30%,transparent)}.btn.upd[aria-busy=true]{opacity:.75;cursor:progress}.fl-status.ok{color:var(--ok, var(--fg))}.fl-status.bad{color:var(--bad, #d64545)}.fl-status.warn{color:var(--warn, #b7791f)}
 </style>
 <style>
 /* Layout: deed-record desk. Sticky header with source + tabs; Finder = criteria column + results ledger; Map = full-bleed map with control rail. */
@@ -941,6 +941,7 @@ textarea.out { min-height: 200px; font-family: var(--font-data); font-size: 12px
         </div>
         <div class="field"><span>Price paid</span><div class="row2"><input type="number" id="fPmin" min="0" step="1000" placeholder="Min $" aria-label="Minimum price"><input type="number" id="fPmax" min="0" step="1000" placeholder="Max $" aria-label="Maximum price"></div></div>
         <label class="check"><input type="checkbox" id="fCash" checked> Cash purchases only</label>
+        <div class="upd-bar"><button type="button" class="btn upd" id="updFind">Refresh results</button><span class="hint" id="updFindNote" hidden></span></div>
       </form>
       <div class="results">
         <div class="stats" id="stats"></div>
@@ -963,6 +964,7 @@ textarea.out { min-height: 200px; font-family: var(--font-data); font-size: 12px
   <section id="view-map" role="tabpanel" aria-labelledby="tab-map">
     <div class="maptab">
       <aside class="rail">
+        <div class="upd-bar"><button type="button" class="btn upd" id="updMap">Refresh results</button><span class="hint" id="updMapNote" hidden></span></div>
         <div class="field"><span>Subject property</span>
           <form class="subject-row" id="subjForm"><input type="text" id="subjInput" placeholder="Address, ZIP, coordinates or Google Maps link" aria-label="Subject property"><button class="btn primary" type="submit">Go</button></form>
           <button class="btn" type="button" id="pickBtn">Drop a pin on the map</button>
@@ -1656,12 +1658,12 @@ function updateSel() {
 
 function renderAll(loading) {
   renderSource(); renderCriteria();
-  compute(); renderStats(); renderTable(loading);
+  compute(); renderStats(); renderTable(loading); updBtns();
   if (S.tab === "map") renderMap();
   if (S.tab === "lists") renderLists();
 }
 var saveF;
-function changed() { if (S.source === "fl") flMaybeReload(); clearTimeout(saveF); saveF = setTimeout(function () { lsSet("cbf.filters", S.f); }, 400); S.shown = 100; renderCriteria(); compute(); renderStats(); renderTable(); if (S.tab === "map") renderMap(); }
+function changed() { if (S.source === "fl") { if (FL.busy) FL.queued = true; flMaybeReload(); } clearTimeout(saveF); saveF = setTimeout(function () { lsSet("cbf.filters", S.f); }, 400); S.shown = 100; renderCriteria(); compute(); renderStats(); renderTable(); if (S.tab === "map") renderMap(); updBtns(); }
 
 /* ---------- list actions from finder ---------- */
 function addSelectedTo(listId, newName) {
@@ -2195,8 +2197,8 @@ function flLoad(force) {
   if (!inFlorida(s.lat, s.lng)) { flStatus("Live public records cover Florida only. Move the subject property into Florida.", "warn"); return Promise.resolve(); }
   if (typeof fetch !== "function") { flStatus("This browser can't load live records.", "bad"); return Promise.resolve(); }
   var qr = flQueryRadius(), seq = ++FL.seq;
-  FL.busy = true; FL.err = "";
-  $("flLoad").disabled = true;
+  FL.busy = true; FL.err = ""; FL.queued = false;
+  $("flLoad").disabled = true; updBtns();
   flStatus("Loading Florida sales within " + qr + " mi…");
   var minYear = NOW.getFullYear() - 4;
   var stateOpt = { centroidOk: FL.centroidOk, envelope: true, noOrder: true, retry: function () { if (!FL.own) return false; FL.own = false; return true; } };
@@ -2276,7 +2278,13 @@ function flLoad(force) {
     FL.err = err && err.message || "network error";
     var blocked = /Failed to fetch|NetworkError|Load failed|blocked|CSP|TypeError/i.test(FL.err) || !err || err.name === "TypeError";
     flStatus(blocked ? "Live Florida records can't load inside the Claude page viewer, which blocks outside connections. They load when this page is opened as its own web page." : "Couldn't load the Florida parcel records (" + FL.err + "). Try again in a moment.", "bad");
-  }).then(function () { if (seq === FL.seq) { FL.busy = false; $("flLoad").disabled = false; } });
+  }).then(function () {
+    if (seq !== FL.seq) return;
+    FL.busy = false; $("flLoad").disabled = false;
+    var again = FL.queued && flNeedsLoad(); FL.queued = false;
+    updBtns();
+    if (again) flMaybeReload();
+  });
 }
 function fmtIsoShort(d) { return d ? MON[+d.slice(5, 7) - 1] + " " + (+d.slice(8, 10)) + ", " + d.slice(0, 4) : ""; }
 function flSummary(nBuyers, qr, st, srcs) {
@@ -2292,12 +2300,33 @@ function flSummary(nBuyers, qr, st, srcs) {
   return msg;
 }
 // reload when the subject moves out of, or the radius grows past, what was loaded
+function flNeedsLoad() {
+  var s = S.f.subject; if (S.source !== "fl" || !s) return false;
+  return !FL.at || milesBetween(FL.at.lat, FL.at.lng, s.lat, s.lng) + flQueryRadius() > FL.radius + 0.05;
+}
 function flMaybeReload() {
-  if (S.source !== "fl" || FL.busy) return;
-  var s = S.f.subject; if (!s) return;
-  var need = flQueryRadius();
-  if (FL.at && milesBetween(FL.at.lat, FL.at.lng, s.lat, s.lng) + need <= FL.radius + 0.05) return;
+  if (S.source !== "fl" || FL.busy || !flNeedsLoad()) return;
   clearTimeout(FL.timer); FL.timer = setTimeout(function () { flLoad(); }, 500);
+}
+// the Update results buttons: lit up when the records on screen don't cover the current subject, radius or filters yet
+function updBtns() {
+  var busy = S.source === "fl" && FL.busy, pend = !busy && (flNeedsLoad() || (S.source === "fl" && !!FL.err && !!S.f.subject));
+  ["updMap", "updFind"].forEach(function (id) {
+    var b = $(id); if (!b) return;
+    b.textContent = busy ? "Updating results…" : pend ? "Update results" : "Refresh results";
+    b.classList.toggle("primary", pend); b.classList.toggle("pending", pend);
+    b.setAttribute("aria-busy", busy ? "true" : "false");
+  });
+  ["updMapNote", "updFindNote"].forEach(function (id) {
+    var n = $(id); if (!n) return;
+    n.textContent = busy ? (FL.queued ? "Your new changes load as soon as this finishes." : "") : pend ? "Your changes reach past the records loaded. Press Update results to load them." : S.source === "fl" && FL.at ? "Filters apply right away. Refresh reloads the latest records." : "";
+    n.hidden = !n.textContent;
+  });
+}
+function updateResults() {
+  clearTimeout(FL.timer);
+  if (S.source === "fl") { if (!S.f.subject) { showTab("map"); flStatus("Set a subject property first: an address, a ZIP, or a pin on the map.", "warn"); toast("Set a subject property first."); return; } return flLoad(true); }
+  S.shown = 100; renderAll(); toast("Results updated.");
 }
 function geocodeAddress(q) {
   if (typeof fetch !== "function") return Promise.reject(new Error("nofetch"));
@@ -2805,6 +2834,7 @@ function init() {
   $("subjForm").addEventListener("submit", function (e) { e.preventDefault(); setSubjectFromText($("subjInput").value); });
   $("pickBtn").onclick = function () { setPicking(!picking); };
   $("flLoad").onclick = function () { flLoad(true); };
+["updMap", "updFind"].forEach(function (id) { var b = $(id); if (b) b.onclick = function () { updateResults(); }; });
   $("resetFilters").onclick = function () { var keep = S.f.subject; S.f = clone(DEFAULT_F); S.f.subject = keep || clone(DEFAULT_F.subject); changed(); };
   $("selAll").onchange = function (e) { S.results.rows.forEach(function (r) { if (e.target.checked) S.selected.add(r.b.id); else S.selected.delete(r.b.id); }); renderTable(); };
   $("addTo").onchange = function (e) { if (e.target.value === "__new") { $("newListInline").hidden = false; $("newListName").focus(); } else $("newListInline").hidden = true; updateSel(); };

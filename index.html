@@ -2085,8 +2085,13 @@ function marionMail(lines) {
 function arcRadius(url, base, s, qr, onPage, opt) {
   var all = [], o = opt || { centroidOk: true };
   function params(off) {
-    var p = { geometry: s.lng + "," + s.lat, geometryType: "esriGeometryPoint", inSR: "4326", spatialRel: "esriSpatialRelIntersects",
-      distance: String(qr), units: "esriSRUnit_StatuteMile", outSR: "4326", f: "json", resultOffset: String(off), resultRecordCount: "2000" };
+    var p = { inSR: "4326", spatialRel: "esriSpatialRelIntersects", outSR: "4326", f: "json", resultOffset: String(off), resultRecordCount: "2000" };
+    if (o.envelope) {
+      // some layers reject a distance search around a lat/lng point, so ask for the box around the circle and trim to the radius afterwards
+      var dla = qr / 69, dlo = qr / (69 * Math.cos(s.lat * Math.PI / 180));
+      p.geometry = [s.lng - dlo, s.lat - dla, s.lng + dlo, s.lat + dla].map(function (v) { return v.toFixed(6); }).join(",");
+      p.geometryType = "esriGeometryEnvelope";
+    } else { p.geometry = s.lng + "," + s.lat; p.geometryType = "esriGeometryPoint"; p.distance = String(qr); p.units = "esriSRUnit_StatuteMile"; }
     for (var k in base) p[k] = typeof base[k] === "function" ? base[k]() : base[k];
     if (o.centroidOk) { p.returnGeometry = "false"; p.returnCentroid = "true"; }
     else { p.returnGeometry = "true"; p.maxAllowableOffset = "0.0005"; p.geometryPrecision = "5"; }
@@ -2098,11 +2103,12 @@ function arcRadius(url, base, s, qr, onPage, opt) {
       if (off === 0 && err.svc && o.centroidOk) { o.centroidOk = false; return arcPost(url, params(off)); }
       throw err;
     }).then(function (j) {
-      var f = j.features || [];
-      if (off === 0 && f.length && o.centroidOk && !f[0].centroid) { o.centroidOk = false; return page(0); }
+      var f = j.features || [], got = f.length;
+      if (o.envelope) f = f.filter(function (ft) { var c = featCenter(ft); return !c || milesBetween(s.lat, s.lng, c.la, c.lo) <= qr; });
+      if (off === 0 && got && o.centroidOk && !(j.features[0] || {}).centroid) { o.centroidOk = false; return page(0); }
       Array.prototype.push.apply(all, f);
       if (onPage) onPage(all.length);
-      if (j.exceededTransferLimit && f.length && all.length < FL_MAX) return page(off + f.length);
+      if (j.exceededTransferLimit && got && all.length < FL_MAX) return page(off + got);
       return { feats: all, capped: !!(j.exceededTransferLimit && all.length >= FL_MAX) };
     });
   }
@@ -2139,7 +2145,7 @@ function flLoad(force) {
   $("flLoad").disabled = true;
   flStatus("Loading Florida sales within " + qr + " mi…");
   var minYear = NOW.getFullYear() - 4;
-  var stateOpt = { centroidOk: FL.centroidOk, retry: function () { if (!FL.own) return false; FL.own = false; return true; } };
+  var stateOpt = { centroidOk: FL.centroidOk, envelope: true, retry: function () { if (!FL.own) return false; FL.own = false; return true; } };
   var state = arcRadius(FL_LAYER, { where: "SALE_YR1>=" + minYear + " AND SALE_PRC1>=1000", outFields: function () { return FL_FIELDS + (FL.own ? FL_OWN : ""); },
     orderByFields: "SALE_YR1 DESC,SALE_MO1 DESC" }, s, qr, function (n) { if (seq === FL.seq) flStatus("Loading Florida sales within " + qr + " mi… " + fmtInt(n) + " so far"); }, stateOpt);
   // the county the subject sits in is always asked, so its own records still load if the state layer is down

@@ -2062,6 +2062,12 @@ var COUNTY_SRC = {
     where: function (y) { return "LastSaleDate >= DATE '" + y + "-01-01' AND LastSalePrice >= 1000"; }, order: "LastSaleDate DESC",
     row: function (a) { return { id: a.AltKey, date: msDate(a.LastSaleDate), price: a.LastSalePrice, dor: String(a.LandUseCode || "").slice(0, 2), vi: "", built: a.YearBuilt,
       name: a.OwnerName, addr: a.PropertyAddress, city: "", zip: "", mail: a.OwnerAddress, mcity: a.OwnerCity, mst: a.OwnerState, mzip: a.OwnerZip }; } },
+  74: { name: "Volusia", url: "https://maps5.vcgov.org/arcgis/rest/services/Applications/Interra/MapServer/26/query",
+    fields: "PARID,OWNER1,MAILADDR1,MAILCITY,MAILSTATE,MAILZIP,ADDRFULL,CITYNAME,ZIP1,LASTSALEDT,LASTSALEPRICE,PC,HXFLAG",
+    where: function (y) { return "LASTSALEDT >= DATE '" + y + "-01-01' AND LASTSALEPRICE >= 1000"; }, order: "LASTSALEDT DESC",
+    row: function (a) { return { id: a.PARID, date: msDate(a.LASTSALEDT), price: a.LASTSALEPRICE, dor: String(a.PC || "").slice(0, 2), vi: "", built: "",
+      name: a.OWNER1, addr: a.ADDRFULL, city: a.CITYNAME, zip: a.ZIP1, mail: a.MAILADDR1, mcity: a.MAILCITY, mst: a.MAILSTATE, mzip: a.MAILZIP,
+      occ: cleanStr(a.HXFLAG).toUpperCase() === "Y" }; } },
   // Marion publishes the sale year and month only, so its dates are shown to the month
   52: { name: "Marion", monthOnly: true, url: "https://gis.marionfl.org/public/rest/services/General/ParcelCentroids/FeatureServer/0/query",
     fields: "PARCEL,NAME,ADD_1,ADD_2,ADD_3,ADD_4,ZIP,SITUS_1,YR1,MO1,PR_1,VI1,PC,YRBLT1,HX",
@@ -2642,7 +2648,7 @@ function renderComps(comps) {
   var unplaced = comps.filter(function (c) { return c.p.la == null; }).length;
   if (unplaced) notes.push(fmtInt(unplaced) + (unplaced === 1 ? " purchase has" : " purchases have") + " no location, so " + (unplaced === 1 ? "it isn't" : "they aren't") + " pinned.");
   if (S.source === "sample") notes.push("Sample data: made-up buyers around Charlotte.");
-  if (S.source === "fl") notes.push("Florida public records: each buyer is the current owner with their most recent sale, placed at the parcel. Lee, Sarasota, Miami-Dade, Manatee, Lake and Marion come from the county property appraiser and are current to the last few weeks (Marion to the month); other counties come from the yearly state tax roll. These records don't say whether a sale was cash.");
+  if (S.source === "fl") notes.push("Florida public records: each buyer is the current owner with their most recent sale, placed at the parcel. Lee, Sarasota, Miami-Dade, Manatee, Lake, Volusia and Marion come from the county property appraiser and are current to the last few weeks (Marion to the month); other counties come from the yearly state tax roll. These records don't say whether a sale was cash.");
   if (notes.length) sum.appendChild(el("div", { className: "hint", text: notes.join(" ") }));
   renderBuyerCard();
   var list = $("compList"); list.innerHTML = "";

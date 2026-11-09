@@ -1100,6 +1100,7 @@ function el(tag, attrs, kids) {
 function isoDate(d) { var z = new Date(d.getTime() - d.getTimezoneOffset() * 60000); return z.toISOString().slice(0, 10); }
 function parseIso(s) { var p = s.split("-"); return new Date(+p[0], +p[1] - 1, +p[2]); }
 function monthsAgo(m) { var d = new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate()); d.setMonth(d.getMonth() - m); return d; }
+function fmtPrice(p) { return p && p.np ? "Price not published" : fmtMoney(p && p.p); }
 function fmtMoney(n) {
   if (n == null || !isFinite(n)) return "—";
   if (n >= 1e6) return "$" + (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + "M";
@@ -1449,6 +1450,7 @@ function compute() {
   function passP(p, wide) {
     if (!kinds[p.k || "existing"]) return false;
     if (f.cash && p.cash === false) return false;
+    if (p.np && (pmin != null || pmax != null)) return false;
     if (pmin != null && (p.p || 0) < pmin) return false;
     if (pmax != null && (p.p || 0) > pmax) return false;
     if (areas.length) {
@@ -1639,7 +1641,7 @@ function detailRow(r) {
       el("td", { className: "num", text: p.nd ? "no date" : fmtDate(p.d) }),
       el("td", { text: [p.a, p.c, p.st, p.z].filter(Boolean).join(", ") || "—" }),
       el("td", { text: (KIND_LABEL[p.k] || "Existing home") + (p.n > 1 ? " ×" + p.n : "") }),
-      el("td", { className: "r num", text: fmtMoney(p.p) }),
+      el("td", { className: "r num", text: fmtPrice(p) }),
       el("td", null, [p.la != null ? el("button", { type: "button", className: "btn ghost", text: "Map", onclick: function () { S.selBuyer = b.id; S.selP = p; showTab("map"); setTimeout(function () { if (map) { fittedOnce = true; map.setView([p.la, p.lo], 15); renderMap(); } }, 60); } }) : null])
     ]));
   });
@@ -1700,7 +1702,7 @@ function removeSelected() {
 function csvCell(v) { v = v == null ? "" : String(v); return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
 function toCsv(rows) { return rows.map(function (r) { return r.map(csvCell).join(","); }).join("\r\n") + "\r\n"; }
 var PURCHASE_HEADERS = ["buyer_name", "entity_type", "buyer_type", "phone", "email", "mailing_address", "property_address", "city", "county", "state", "zip", "latitude", "longitude", "purchase_date", "price", "property_count", "property_type", "cash"];
-function purchaseRow(b, p) { return [b.name, b.entity, b.type, b.phone, b.email, b.mail, p.a, p.c, p.co, p.st, p.z, p.la, p.lo, p.nd ? "" : p.d, p.p, p.n || 1, KIND_LABEL[p.k] || "Existing home", p.cash === false ? "no" : "yes"]; }
+function purchaseRow(b, p) { return [b.name, b.entity, b.type, b.phone, b.email, b.mail, p.a, p.c, p.co, p.st, p.z, p.la, p.lo, p.nd ? "" : p.d, p.np ? "" : p.p, p.n || 1, KIND_LABEL[p.k] || "Existing home", p.cash === false ? "no" : "yes"]; }
 function exportBuyers() {
   var R = S.results; var rows = [["buyer_name", "entity_type", "buyer_type", "phone", "email", "mailing_address", "properties_bought_last_" + R.months + "_months", "properties_bought_prior_" + R.months + "_months", "total_spent", "median_price", "last_purchase", "top_areas"]];
   R.rows.forEach(function (r) { rows.push([r.b.name, r.b.entity, r.b.type, r.b.phone, r.b.email, r.b.mail, r.count, r.prevCount, Math.round(r.spent), r.med == null ? "" : Math.round(r.med), r.last, r.where.join("; ")]); });
@@ -1919,7 +1921,8 @@ function parseImport(rows, previewOnly) {
     var name = g(r, "name").replace(/\s+/g, " ");
     if (!name) { stats.skipped++; return; }
     var yr = parseInt(g(r, "year"), 10), mo = parseInt(g(r, "month"), 10);
-    if (IMP.fl && (!(num(g(r, "price")) > 100) || !(yr >= FL_MIN_YEAR))) { stats.notSale++; return; }
+    var np = IMP.fl && g(r, "np") === "1";
+    if (IMP.fl && ((!np && !(num(g(r, "price")) > 100)) || !(yr >= FL_MIN_YEAR))) { stats.notSale++; return; }
     if (IMP.fl && normEntity("", name) === "person" && g(r, "vacant").toUpperCase() !== "V") {
       var na = function (x) { return x.toUpperCase().replace(/[^A-Z0-9]/g, ""); };
       if (g(r, "occ") === "1" || (g(r, "mail") && na(g(r, "mail")) === na(g(r, "address")))) { stats.ownerOcc++; return; }
@@ -1954,6 +1957,7 @@ function parseImport(rows, previewOnly) {
     if (IMP.fl && !b.purchases.length && IMP.map.mail) b.mail = [g(r, "mail")].concat(IMP.flMail.map(function (c) { return String(r[c] || "").trim(); })).filter(Boolean).join(", ");
     var p = { d: d, p: num(g(r, "price")) || 0, la: la, lo: lo, z: zip, c: g(r, "city"), co: g(r, "county").replace(/\s+county$/i, ""), st: (g(r, "state") || (IMP.fl ? "FL" : "")).toUpperCase().slice(0, 2), a: g(r, "address"), k: k, n: n, cash: cash };
     if (nd) p.nd = nd;
+    if (np) { p.np = true; p.p = 0; }
     b.purchases.push(p);
     if (previewOnly) preview.push([name, b.entity === "business" ? "Business" : "Person", b.type, nd ? "none" : d, p.p ? fmtMoney(p.p) : "—", String(n), how]);
   });
@@ -2064,6 +2068,15 @@ var COUNTY_SRC = {
     where: function (y) { return "LastSaleDate >= DATE '" + y + "-01-01' AND LastSalePrice >= 1000"; }, order: "LastSaleDate DESC",
     row: function (a) { return { id: a.AltKey, date: msDate(a.LastSaleDate), price: a.LastSalePrice, dor: String(a.LandUseCode || "").slice(0, 2), vi: "", built: a.YearBuilt,
       name: a.OwnerName, addr: a.PropertyAddress, city: "", zip: "", mail: a.OwnerAddress, mcity: a.OwnerCity, mst: a.OwnerState, mzip: a.OwnerZip }; } },
+  // Charlotte publishes owners and sale dates but no sale prices; prices come from the state roll when it has the same sale
+  18: { name: "Charlotte", noPrice: true, url: "https://agis3.charlottecountyfl.gov/arcgis/rest/services/Essentials/CCGISLayers/MapServer/27/query",
+    fields: "ACCOUNT,ownersname,mailingaddress,suite,mailingaddress2,city,state,zipcode,FullPropertyAddress,usecode,ishomestead,lastsaleno70cent",
+    where: function (y) { return "lastsaleno70cent >= DATE '" + y + "-01-01'"; }, order: "lastsaleno70cent DESC",
+    row: function (a) { var d = msDate(a.lastsaleno70cent);
+      return { id: a.ACCOUNT, date: d, price: "", dor: String(a.usecode || "").slice(0, 2), vi: "", built: "",
+        name: a.ownersname, addr: a.FullPropertyAddress, city: "", zip: "", mail: cleanStr(a.mailingaddress2) || cleanStr(a.mailingaddress), mcity: a.city, mst: a.state, mzip: a.zipcode,
+        // the homestead flag is the previous owner's until the new owner files, so it only counts for sales before this year
+        occ: +a.ishomestead === 1 && +d.slice(0, 4) < NOW.getFullYear() }; } },
   74: { name: "Volusia", url: "https://maps5.vcgov.org/arcgis/rest/services/Applications/Interra/MapServer/26/query",
     fields: "PARID,OWNER1,MAILADDR1,MAILCITY,MAILSTATE,MAILZIP,ADDRFULL,CITYNAME,ZIP1,LASTSALEDT,LASTSALEPRICE,PC,HXFLAG",
     where: function (y) { return "LASTSALEDT >= DATE '" + y + "-01-01' AND LASTSALEPRICE >= 1000"; }, order: "LASTSALEDT DESC",
@@ -2177,6 +2190,24 @@ function featCenter(ft) {
   return flRingCenter(g);
 }
 // turns one county layer feature into a state-tax-roll shaped row
+// the state roll's rows for one county, by parcel number and by street address, so a county without prices can borrow the state's price for the same sale
+function flKey(v) { return String(v == null ? "" : v).toUpperCase().replace(/[^A-Z0-9]/g, ""); }
+function flPriceIndex(feats, code) {
+  var ix = { id: {}, addr: {} };
+  (feats || []).forEach(function (ft) {
+    var a = ft.attributes || {}; if (+a.CO_NO !== code || !(+a.SALE_PRC1 > 100)) return;
+    var v = { p: +a.SALE_PRC1, ym: (+a.SALE_YR1 || 0) * 100 + (+a.SALE_MO1 || 0) };
+    var k = flKey(a.PARCEL_ID); if (k) ix.id[k] = v;
+    var ad = flKey(a.PHY_ADDR1); if (ad && /^\d/.test(ad)) ix.addr[ad] = v;
+  });
+  return ix;
+}
+function flPriceFor(ix, r) {
+  var ym = (+r.SALE_YR1 || 0) * 100 + (+r.SALE_MO1 || 0);
+  var v = ix.id[flKey(r.__id)] || ix.addr[flKey(r.PHY_ADDR1)];
+  // only the same sale: the state's last sale has to fall in the same month as the county's
+  return v && v.ym === ym ? v.p : 0;
+}
 function countyRow(src, code, ft) {
   var x = src.row(ft.attributes || {}), dor = flCode(x.dor);
   if (!x.date || !flKeepUse(dor) || !cleanStr(x.name)) return null;
@@ -2189,7 +2220,7 @@ function countyRow(src, code, ft) {
   return { CO_NO: code, DOR_UC: dor, OWN_NAME: cleanStr(x.name), PHY_ADDR1: cleanStr(x.addr), PHY_CITY: cleanStr(x.city), PHY_ZIPCD: zip,
     ACT_YR_BLT: built, SALE_PRC1: +x.price || 0, SALE_YR1: yr, SALE_MO1: mo, VI_CD1: vi,
     OWN_ADDR1: cleanStr(x.mail), OWN_CITY: cleanStr(x.mcity), OWN_STATE: cleanStr(x.mst), OWN_ZIPCD: mz,
-    __date: x.date, __occ: x.occ ? "1" : "", __id: cleanStr(x.id), __lat: c ? c.la : "", __lng: c ? c.lo : "", __county: FL_COUNTY[code] || src.name };
+    __date: x.date, __occ: x.occ ? "1" : "", __np: src.noPrice && !(+x.price > 100) ? "1" : "", __id: cleanStr(x.id), __lat: c ? c.la : "", __lng: c ? c.lo : "", __county: FL_COUNTY[code] || src.name };
 }
 function flLoad(force) {
   var s = S.f.subject;
@@ -2234,17 +2265,18 @@ function flLoad(force) {
     // a county's own rows replace the state's rows for that county only when they actually came back
     cs.forEach(function (c) {
       if (c.err) { srcs.push({ name: c.src.name, err: c.err }); return; }
-      var got = [], top = "";
+      var got = [], top = "", fill = c.src.noPrice ? flPriceIndex(st.feats, c.code) : null, filled = 0, nop = 0;
       c.feats.forEach(function (ft) {
         var r = countyRow(c.src, c.code, ft); if (!r) return;
         var key = c.code + ":" + (r.__id || r.__lat + "," + r.__lng); if (seen[key]) return; seen[key] = 1;
         if (r.__date > top) top = r.__date;
+        if (fill && r.__np) { var pr = flPriceFor(fill, r); if (pr) { r.SALE_PRC1 = pr; r.__np = ""; filled++; } else nop++; }
         got.push(r);
       });
       if (!got.length) { srcs.push({ name: c.src.name, err: "no sales came back" }); return; }
       own[c.code] = 1; capped = capped || c.capped;
       Array.prototype.push.apply(crow, got);
-      srcs.push({ name: c.src.name, n: got.length, newest: top, monthOnly: !!c.src.monthOnly });
+      srcs.push({ name: c.src.name, n: got.length, newest: top, monthOnly: !!c.src.monthOnly, noPrice: !!c.src.noPrice, filled: filled, nop: nop });
     });
     if (st.err && !crow.length) throw st.err;
     var rows = [], stateNewest = 0;
@@ -2261,7 +2293,7 @@ function flLoad(force) {
     Array.prototype.push.apply(rows, crow);
     var keep = IMP;
     IMP = { file: "", rows: rows, cols: [], fl: true, flMail: FL.own ? ["OWN_CITY", "OWN_STATE", "OWN_ZIPCD"] : [],
-      map: { name: "OWN_NAME", price: "SALE_PRC1", year: "SALE_YR1", month: "SALE_MO1", date: "__date", occ: "__occ", vacant: "VI_CD1", built: "ACT_YR_BLT", address: "PHY_ADDR1", city: "PHY_CITY", zip: "PHY_ZIPCD", lat: "__lat", lng: "__lng", county: "__county", mail: "OWN_ADDR1" } };
+      map: { name: "OWN_NAME", price: "SALE_PRC1", year: "SALE_YR1", month: "SALE_MO1", date: "__date", occ: "__occ", np: "__np", vacant: "VI_CD1", built: "ACT_YR_BLT", address: "PHY_ADDR1", city: "PHY_CITY", zip: "PHY_ZIPCD", lat: "__lat", lng: "__lng", county: "__county", mail: "OWN_ADDR1" } };
     var res;
     try { res = parseImport(rows, false); } finally { IMP = keep; }
     res.buyers.forEach(function (b) { b.src = "fl"; b.purchases.sort(function (x, y) { return x.d < y.d ? 1 : -1; }); });
@@ -2290,7 +2322,10 @@ function fmtIsoShort(d) { return d ? MON[+d.slice(5, 7) - 1] + " " + (+d.slice(8
 function flSummary(nBuyers, qr, st, srcs) {
   var msg = fmtInt(FL.kept) + " Florida sales from " + fmtInt(nBuyers) + " owners within " + qr + " mi.";
   var good = srcs.filter(function (x) { return !x.err; }), bad = srcs.filter(function (x) { return x.err; });
-  good.forEach(function (x) { msg += " " + x.name + " County comes from its property appraiser's own records" + (x.newest ? ", with sales through " + (x.monthOnly ? MON[+x.newest.slice(5, 7) - 1] + " " + x.newest.slice(0, 4) : fmtIsoShort(x.newest)) : "") + "."; });
+  good.forEach(function (x) {
+    msg += " " + x.name + " County comes from its property appraiser's own records" + (x.newest ? ", with sales through " + (x.monthOnly ? MON[+x.newest.slice(5, 7) - 1] + " " + x.newest.slice(0, 4) : fmtIsoShort(x.newest)) : "") + ".";
+    if (x.noPrice) msg += " " + x.name + " doesn't publish sale prices: " + (x.filled ? fmtInt(x.filled) + " come from the state tax roll and " : "") + fmtInt(x.nop) + " show as price not published.";
+  });
   if (st.err) msg += " The state tax roll didn't load, so other counties are missing.";
   else if (FL.newest) msg += " " + (good.length ? "Other counties come from" : "From") + " the state tax roll, newest sale " + MON[FL.newest.m - 1] + " " + FL.newest.y + ", updated about once a year.";
   bad.forEach(function (x) { msg += " " + x.name + " County's own records didn't load, so it uses the state tax roll."; });
@@ -2640,7 +2675,7 @@ function renderMap() {
     if (S.selBuyer) order = order.filter(function (c) { return c.r.b.id !== S.selBuyer; }).concat(order.filter(function (c) { return c.r.b.id === S.selBuyer; }));
     order.forEach(function (c) {
       var m = L.circleMarker([c.p.la, c.p.lo], pinStyle(c));
-      m.bindTooltip("<b>" + escapeHtml(c.r.b.name) + "</b><br>" + escapeHtml(c.r.b.type) + " · " + (c.r.b.entity === "business" ? "Business" : "Person") + "<br>" + (c.p.nd ? "No date" : fmtDate(c.p.d)) + " · " + fmtMoney(c.p.p) + (c.d != null ? " · " + mi(c.d) : ""), { className: "cell-tip", direction: "top", offset: [0, -6] });
+      m.bindTooltip("<b>" + escapeHtml(c.r.b.name) + "</b><br>" + escapeHtml(c.r.b.type) + " · " + (c.r.b.entity === "business" ? "Business" : "Person") + "<br>" + (c.p.nd ? "No date" : fmtDate(c.p.d)) + " · " + fmtPrice(c.p) + (c.d != null ? " · " + mi(c.d) : ""), { className: "cell-tip", direction: "top", offset: [0, -6] });
       m.on("click", function () { selectBuyer(c.r.b.id, c.p, { scrollList: true }); });
       markerFor.set(c.p, m);
       pinLayer.addLayer(m);
@@ -2677,7 +2712,7 @@ function renderComps(comps) {
   var unplaced = comps.filter(function (c) { return c.p.la == null; }).length;
   if (unplaced) notes.push(fmtInt(unplaced) + (unplaced === 1 ? " purchase has" : " purchases have") + " no location, so " + (unplaced === 1 ? "it isn't" : "they aren't") + " pinned.");
   if (S.source === "sample") notes.push("Sample data: made-up buyers around Charlotte.");
-  if (S.source === "fl") notes.push("Florida public records: each buyer is the current owner with their most recent sale, placed at the parcel. Lee, Sarasota, Miami-Dade, Manatee, Lake, Volusia and Marion come from the county property appraiser and are current to the last few weeks (Marion to the month); other counties come from the yearly state tax roll. These records don't say whether a sale was cash.");
+  if (S.source === "fl") notes.push("Florida public records: each buyer is the current owner with their most recent sale, placed at the parcel. Lee, Sarasota, Miami-Dade, Manatee, Lake, Volusia, Charlotte and Marion come from the county property appraiser and are current to the last few weeks (Marion to the month; Charlotte publishes no prices, so its recent sales show \"price not published\" unless the state roll has the price); other counties come from the yearly state tax roll. These records don't say whether a sale was cash.");
   if (notes.length) sum.appendChild(el("div", { className: "hint", text: notes.join(" ") }));
   renderBuyerCard();
   var list = $("compList"); list.innerHTML = "";
@@ -2689,13 +2724,13 @@ function renderComps(comps) {
   comps.slice(0, S.compShown).forEach(function (c) {
     var b = c.r.b, p = c.p, mine = S.selBuyer === b.id, isP = S.selP === p;
     var row = el("div", { className: "comp" + (mine ? " sel" : ""), role: "button", tabindex: "0", "data-sel": isP ? "1" : null,
-      "aria-label": b.name + ", " + (p.nd ? "no date" : fmtDate(p.d)) + ", " + fmtMoney(p.p) + (c.d != null ? ", " + mi(c.d) + " away" : "") }, [
+      "aria-label": b.name + ", " + (p.nd ? "no date" : fmtDate(p.d)) + ", " + fmtPrice(p) + (c.d != null ? ", " + mi(c.d) + " away" : "") }, [
       el("span", { className: "dot", style: "background:" + (TYPE_COLOR[b.type] || "#888") }),
       el("span", { className: "who", text: b.name }),
       el("span", { className: "dist", text: c.d != null ? mi(c.d) : "" }),
       el("span", { className: "what" }, [
         el("span", { className: "num", text: p.nd ? "No date" : fmtDate(p.d) }),
-        el("span", { className: "num", text: fmtMoney(p.p) }),
+        el("span", { className: "num" + (p.np ? " np" : ""), text: fmtPrice(p) }),
         el("span", { text: (KIND_LABEL[p.k] || "Existing home") + (p.n > 1 ? " ×" + p.n : "") }),
         el("span", { text: b.type + " · " + (b.entity === "business" ? "Business" : "Person") }),
         el("span", { text: [p.a, p.c, p.z].filter(Boolean).join(", ") })

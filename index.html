@@ -2093,16 +2093,23 @@ function arcRadius(url, base, s, qr, onPage, opt) {
       p.geometryType = "esriGeometryEnvelope";
     } else { p.geometry = s.lng + "," + s.lat; p.geometryType = "esriGeometryPoint"; p.distance = String(qr); p.units = "esriSRUnit_StatuteMile"; }
     for (var k in base) p[k] = typeof base[k] === "function" ? base[k]() : base[k];
+    // some layers refuse a sorted query once it asks for many fields, so a refused sort is dropped and the rows are sorted here instead
+    if (o.noOrder) delete p.orderByFields;
     if (o.centroidOk) { p.returnGeometry = "false"; p.returnCentroid = "true"; }
     else { p.returnGeometry = "true"; p.maxAllowableOffset = "0.0005"; p.geometryPrecision = "5"; }
     return p;
   }
   function page(off) {
     return arcPost(url, params(off)).catch(function (err) {
-      if (off === 0 && err.svc && o.retry && o.retry()) return arcPost(url, params(off));
-      if (off === 0 && err.svc && o.centroidOk) { o.centroidOk = false; return arcPost(url, params(off)); }
+      if (off === 0 && err.svc) {
+        // each fallback is tried once: fewer owner fields, then parcel shapes in place of centroids, then no server-side sort
+        if (o.retry && o.retry()) return { again: true };
+        if (o.centroidOk) { o.centroidOk = false; return { again: true }; }
+        if (!o.noOrder && base.orderByFields) { o.noOrder = true; return { again: true }; }
+      }
       throw err;
     }).then(function (j) {
+      if (j && j.again) return page(off);
       var f = j.features || [], got = f.length;
       if (o.envelope) f = f.filter(function (ft) { var c = featCenter(ft); return !c || milesBetween(s.lat, s.lng, c.la, c.lo) <= qr; });
       if (off === 0 && got && o.centroidOk && !(j.features[0] || {}).centroid) { o.centroidOk = false; return page(0); }
@@ -2145,7 +2152,7 @@ function flLoad(force) {
   $("flLoad").disabled = true;
   flStatus("Loading Florida sales within " + qr + " mi…");
   var minYear = NOW.getFullYear() - 4;
-  var stateOpt = { centroidOk: FL.centroidOk, envelope: true, retry: function () { if (!FL.own) return false; FL.own = false; return true; } };
+  var stateOpt = { centroidOk: FL.centroidOk, envelope: true, noOrder: true, retry: function () { if (!FL.own) return false; FL.own = false; return true; } };
   var state = arcRadius(FL_LAYER, { where: "SALE_YR1>=" + minYear + " AND SALE_PRC1>=1000", outFields: function () { return FL_FIELDS + (FL.own ? FL_OWN : ""); },
     orderByFields: "SALE_YR1 DESC,SALE_MO1 DESC" }, s, qr, function (n) { if (seq === FL.seq) flStatus("Loading Florida sales within " + qr + " mi… " + fmtInt(n) + " so far"); }, stateOpt);
   // the county the subject sits in is always asked, so its own records still load if the state layer is down

@@ -2138,8 +2138,29 @@ function arcRadius(url, base, s, qr, onPage, opt) {
       return parts.reduce(function (pr, e) { return pr.then(function () { if (all.length < FL_MAX) return box(e, depth + 1); }); }, Promise.resolve());
     });
   }
-  var env = o.envelope ? [s.lng - dlo, s.lat - dla, s.lng + dlo, s.lat + dla] : null;
-  return box(env, 0).then(function () { return { feats: all, capped: capped || all.length >= FL_MAX }; });
+  if (!o.envelope) return box(null, 0).then(function () { return { feats: all, capped: capped || all.length >= FL_MAX }; });
+  // a wide search is asked as a grid of boxes about two miles across, three at a time, because one big box can run past the server's time limit
+  var n = Math.max(1, Math.min(6, Math.ceil(qr / 1))), boxes = [];
+  for (var iy = 0; iy < n; iy++) for (var ix = 0; ix < n; ix++) {
+    var e = [s.lng - dlo + 2 * dlo * ix / n, s.lat - dla + 2 * dla * iy / n, s.lng - dlo + 2 * dlo * (ix + 1) / n, s.lat - dla + 2 * dla * (iy + 1) / n];
+    // skip boxes that sit wholly outside the circle
+    var nx = Math.max(e[0], Math.min(s.lng, e[2])), ny = Math.max(e[1], Math.min(s.lat, e[3]));
+    if (milesBetween(s.lat, s.lng, ny, nx) <= qr) boxes.push(e);
+  }
+  // the boxes nearest the subject go first, so a capped search still holds the closest sales
+  boxes.sort(function (a, b) { return milesBetween(s.lat, s.lng, (a[1] + a[3]) / 2, (a[0] + a[2]) / 2) - milesBetween(s.lat, s.lng, (b[1] + b[3]) / 2, (b[0] + b[2]) / 2); });
+  var next = 0, failed = 0, lastErr = null;
+  function worker() {
+    if (next >= boxes.length || all.length >= FL_MAX) return Promise.resolve();
+    var e = boxes[next++];
+    return box(e, 0).catch(function (err) { failed++; lastErr = err; }).then(worker);
+  }
+  var first = box(boxes[0], 0); next = 1;
+  // the first box runs alone so a refused field list or sort is settled once before the rest start
+  return first.then(function () { return Promise.all([worker(), worker(), worker()]); }).then(function () {
+    if (failed && failed >= boxes.length - 1 && !all.length) throw lastErr;
+    return { feats: all, capped: capped || all.length >= FL_MAX, partial: failed > 0 };
+  });
 }
 function featCenter(ft) {
   if (ft.centroid && isFinite(ft.centroid.x)) return { lo: ft.centroid.x, la: ft.centroid.y };
@@ -2237,7 +2258,7 @@ function flLoad(force) {
     try { res = parseImport(rows, false); } finally { IMP = keep; }
     res.buyers.forEach(function (b) { b.src = "fl"; b.purchases.sort(function (x, y) { return x.d < y.d ? 1 : -1; }); });
     FL.buyers = res.buyers; FL.at = { lat: s.lat, lng: s.lng }; FL.radius = qr; FL.rows = rows.length; FL.kept = rows.length - res.stats.ownerOcc - res.stats.notSale;
-    FL.ownerOcc = res.stats.ownerOcc; FL.capped = capped; FL.srcs = srcs;
+    FL.ownerOcc = res.stats.ownerOcc; FL.capped = capped; FL.srcs = srcs; FL.partial = !!st.partial;
     FL.newest = stateNewest ? { y: Math.floor((stateNewest - 1) / 12), m: ((stateNewest - 1) % 12) + 1 } : null;
     flStatus(flSummary(res.buyers.length, qr, st, srcs), "ok");
     if (S.source !== "fl") { S.source = "fl"; lsSet("cbf.source", "fl"); }
@@ -2261,6 +2282,7 @@ function flSummary(nBuyers, qr, st, srcs) {
   bad.forEach(function (x) { msg += " " + x.name + " County's own records didn't load, so it uses the state tax roll."; });
   if (FL.ownerOcc) msg += " " + fmtInt(FL.ownerOcc) + " owner-occupied home purchases left out.";
   if (FL.capped) msg += " Stopped at " + fmtInt(FL_MAX) + " records in a source, so use a smaller radius to see everything.";
+  if (FL.partial) msg += " The state tax roll server timed out on part of the area, so some sales may be missing. Reload to try again.";
   return msg;
 }
 // reload when the subject moves out of, or the radius grows past, what was loaded

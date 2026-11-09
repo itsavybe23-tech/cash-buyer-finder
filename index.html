@@ -2083,13 +2083,13 @@ function marionMail(lines) {
 }
 // pages through an ArcGIS layer around the subject, newest sales first, with the centroid of each parcel in lat/lng
 function arcRadius(url, base, s, qr, onPage, opt) {
-  var all = [], o = opt || { centroidOk: true };
-  function params(off) {
+  var o = opt || { centroidOk: true }, all = [], seen = {}, capped = false;
+  var dla = qr / 69, dlo = qr / (69 * Math.cos(s.lat * Math.PI / 180));
+  function params(env, off) {
     var p = { inSR: "4326", spatialRel: "esriSpatialRelIntersects", outSR: "4326", f: "json", resultOffset: String(off), resultRecordCount: "2000" };
-    if (o.envelope) {
+    if (env) {
       // some layers reject a distance search around a lat/lng point, so ask for the box around the circle and trim to the radius afterwards
-      var dla = qr / 69, dlo = qr / (69 * Math.cos(s.lat * Math.PI / 180));
-      p.geometry = [s.lng - dlo, s.lat - dla, s.lng + dlo, s.lat + dla].map(function (v) { return v.toFixed(6); }).join(",");
+      p.geometry = env.map(function (v) { return v.toFixed(6); }).join(",");
       p.geometryType = "esriGeometryEnvelope";
     } else { p.geometry = s.lng + "," + s.lat; p.geometryType = "esriGeometryPoint"; p.distance = String(qr); p.units = "esriSRUnit_StatuteMile"; }
     for (var k in base) p[k] = typeof base[k] === "function" ? base[k]() : base[k];
@@ -2099,27 +2099,47 @@ function arcRadius(url, base, s, qr, onPage, opt) {
     else { p.returnGeometry = "true"; p.maxAllowableOffset = "0.0005"; p.geometryPrecision = "5"; }
     return p;
   }
-  function page(off) {
-    return arcPost(url, params(off)).catch(function (err) {
-      if (off === 0 && err.svc) {
-        // each fallback is tried once: fewer owner fields, then parcel shapes in place of centroids, then no server-side sort
-        if (o.retry && o.retry()) return { again: true };
-        if (o.centroidOk) { o.centroidOk = false; return { again: true }; }
-        if (!o.noOrder && base.orderByFields) { o.noOrder = true; return { again: true }; }
-      }
-      throw err;
-    }).then(function (j) {
-      if (j && j.again) return page(off);
-      var f = j.features || [], got = f.length;
-      if (o.envelope) f = f.filter(function (ft) { var c = featCenter(ft); return !c || milesBetween(s.lat, s.lng, c.la, c.lo) <= qr; });
-      if (off === 0 && got && o.centroidOk && !(j.features[0] || {}).centroid) { o.centroidOk = false; return page(0); }
-      Array.prototype.push.apply(all, f);
-      if (onPage) onPage(all.length);
-      if (j.exceededTransferLimit && got && all.length < FL_MAX) return page(off + got);
-      return { feats: all, capped: !!(j.exceededTransferLimit && all.length >= FL_MAX) };
+  function keep(ft) {
+    var c = featCenter(ft);
+    if (o.envelope && c && milesBetween(s.lat, s.lng, c.la, c.lo) > qr) return false;
+    // boxes split on a timeout touch along their edges, so a parcel on an edge comes back twice
+    var a = ft.attributes || {}, key = a.PARCEL_ID != null ? a.CO_NO + ":" + a.PARCEL_ID : a.OBJECTID != null ? "o" + a.OBJECTID : "";
+    if (key) { if (seen[key]) return false; seen[key] = 1; }
+    return true;
+  }
+  // a server that times out on a big area is asked again in four smaller boxes, down to about a quarter mile across
+  var splits = 0;
+  function slow(err) { return /^HTTP 50[234]/.test(String(err && err.message || "")) && ++splits <= 12; }
+  function box(env, depth) {
+    var mine = [];
+    function page(off) {
+      return arcPost(url, params(env, off)).catch(function (err) {
+        if (off === 0 && err.svc) {
+          // each fallback is tried once: fewer owner fields, then parcel shapes in place of centroids, then no server-side sort
+          if (o.retry && o.retry()) return { again: true };
+          if (o.centroidOk) { o.centroidOk = false; return { again: true }; }
+          if (!o.noOrder && base.orderByFields) { o.noOrder = true; return { again: true }; }
+        }
+        throw err;
+      }).then(function (j) {
+        if (j && j.again) return page(off);
+        var f = j.features || [], got = f.length;
+        if (off === 0 && got && o.centroidOk && !(f[0] || {}).centroid) { o.centroidOk = false; return page(0); }
+        Array.prototype.push.apply(mine, f);
+        if (onPage) onPage(all.length + mine.length);
+        if (j.exceededTransferLimit && got && all.length + mine.length < FL_MAX) return page(off + got);
+        if (j.exceededTransferLimit) capped = true;
+      });
+    }
+    return page(0).then(function () { mine.forEach(function (ft) { if (keep(ft)) all.push(ft); }); }, function (err) {
+      if (!env || depth >= 3 || !slow(err)) throw err;
+      var mx = (env[0] + env[2]) / 2, my = (env[1] + env[3]) / 2;
+      var parts = [[env[0], env[1], mx, my], [mx, env[1], env[2], my], [env[0], my, mx, env[3]], [mx, my, env[2], env[3]]];
+      return parts.reduce(function (pr, e) { return pr.then(function () { if (all.length < FL_MAX) return box(e, depth + 1); }); }, Promise.resolve());
     });
   }
-  return page(0);
+  var env = o.envelope ? [s.lng - dlo, s.lat - dla, s.lng + dlo, s.lat + dla] : null;
+  return box(env, 0).then(function () { return { feats: all, capped: capped || all.length >= FL_MAX }; });
 }
 function featCenter(ft) {
   if (ft.centroid && isFinite(ft.centroid.x)) return { lo: ft.centroid.x, la: ft.centroid.y };

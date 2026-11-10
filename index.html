@@ -924,7 +924,6 @@ textarea.out { min-height: 200px; font-family: var(--font-data); font-size: 12px
 
 <main>
   <section id="view-find" role="tabpanel" aria-labelledby="tab-find" class="wrap" hidden>
-    <div id="sampleBanner" class="banner"><span>●</span><span><b>Sample data.</b> These are made-up buyers and purchases around Charlotte, NC so you can try every feature. For real Florida buyers, choose <b>Florida public records (live)</b> under Buyers from, or import a county file on <b>Saved lists</b>.</span></div>
     <div class="finder">
       <form class="criteria" id="criteria" autocomplete="off">
         <h2>Search criteria <button type="button" class="btn ghost" id="resetFilters">Reset</button></h2>
@@ -934,7 +933,7 @@ textarea.out { min-height: 200px; font-family: var(--font-data); font-size: 12px
         <div class="field"><span>Bought in the last</span><div class="seg" id="fMonths"><button type="button" data-v="3">3 mo</button><button type="button" data-v="6">6 mo</button><button type="button" data-v="12">12 mo</button><button type="button" data-v="24">24 mo</button></div></div>
         <label class="field"><span>Minimum properties bought</span><input type="number" id="fMin" min="1" step="1" value="2"></label>
         <div class="field"><span>Property type</span><div class="chips" id="fKinds"></div></div>
-        <label class="field"><span>Area (city, county or ZIP)</span><input type="text" id="fArea" placeholder="e.g. Fort Mill, Union, 28110"></label>
+        <label class="field"><span>Area (city, county or ZIP)</span><input type="text" id="fArea" placeholder="e.g. Fort Myers, Lee, 33901"></label>
         <div class="field"><span>Near my subject property</span>
           <div class="row2"><span class="hint" id="subjLabel2" style="align-self:center"></span><select id="fRadius" aria-label="Radius"><option value="0.5">0.5 mile</option><option value="1">1 mile</option><option value="3">3 miles</option><option value="5">5 miles</option><option value="10">10 miles</option><option value="25">25 miles</option><option value="0">Anywhere</option></select></div>
           <span class="hint">Set the subject on Comps search.</span>
@@ -1028,7 +1027,7 @@ textarea.out { min-height: 200px; font-family: var(--font-data); font-size: 12px
       <div class="drop" id="drop">
         <strong>Drop a CSV file here</strong>
         <span class="hint">One row per purchase works best (a deed, sales or permit export). One row per buyer with a property count also works. Florida tax roll files (the county NAL file, or the statewide parcel table built from it) are read automatically.</span>
-        <div class="toolbar" style="justify-content:center"><label class="btn primary" for="csvFile">Choose CSV file</label><input type="file" id="csvFile" accept=".csv,text/csv" hidden><button type="button" class="btn" id="useDemoCsv">Try a small example CSV</button></div>
+        <div class="toolbar" style="justify-content:center"><label class="btn primary" for="csvFile">Choose CSV file</label><input type="file" id="csvFile" accept=".csv,text/csv" hidden></div>
       </div>
     </div>
     <div id="impStep2" hidden>
@@ -1198,98 +1197,6 @@ function countyAt(lat, lng) {
   return null;
 }
 
-/* ---------- sample data (made up, seeded) ---------- */
-function rng(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; var t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
-// zip, city, county, state, growth slope (-1..1.2), typical home price ($K)
-var SAMPLE_ZIPS = [
-  ["29707","Indian Land","Lancaster","SC",1.1,520],["29708","Fort Mill","York","SC",0.8,480],["29715","Fort Mill","York","SC",0.9,500],
-  ["28173","Waxhaw","Union","NC",0.8,600],["28104","Matthews","Union","NC",0.4,430],["28110","Monroe","Union","NC",0.9,360],
-  ["28079","Indian Trail","Union","NC",0.6,400],["28112","Monroe","Union","NC",0.7,300],["28075","Harrisburg","Cabarrus","NC",0.8,430],
-  ["28027","Concord","Cabarrus","NC",0.6,400],["28025","Concord","Cabarrus","NC",0.9,300],["28107","Midland","Cabarrus","NC",1.1,380],
-  ["28097","Locust","Stanly","NC",1.0,340],["28081","Kannapolis","Cabarrus","NC",0.4,280],["28083","Kannapolis","Rowan","NC",0.3,260],
-  ["28078","Huntersville","Mecklenburg","NC",-0.3,450],["28031","Cornelius","Mecklenburg","NC",-0.6,550],["28036","Davidson","Mecklenburg","NC",-0.5,650],
-  ["28117","Mooresville","Iredell","NC",-0.4,480],["28115","Mooresville","Iredell","NC",0.1,420],["28269","Charlotte","Mecklenburg","NC",0.1,350],
-  ["28262","Charlotte","Mecklenburg","NC",0.0,330],["28216","Charlotte","Mecklenburg","NC",-0.6,300],["28012","Belmont","Gaston","NC",0.7,430],
-  ["28120","Mount Holly","Gaston","NC",0.9,330],["28056","Gastonia","Gaston","NC",0.6,320],["28052","Gastonia","Gaston","NC",-0.3,230],
-  ["28214","Charlotte","Mecklenburg","NC",0.5,320],["28208","Charlotte","Mecklenburg","NC",-0.4,290],["28205","Charlotte","Mecklenburg","NC",-0.8,450],
-  ["28203","Charlotte","Mecklenburg","NC",-0.7,700],["28206","Charlotte","Mecklenburg","NC",-0.5,380],["28204","Charlotte","Mecklenburg","NC",-0.9,650],
-  ["28209","Charlotte","Mecklenburg","NC",-0.3,600],["28210","Charlotte","Mecklenburg","NC",-0.5,500],["28211","Charlotte","Mecklenburg","NC",-0.4,550],
-  ["28212","Charlotte","Mecklenburg","NC",0.0,320],["28215","Charlotte","Mecklenburg","NC",0.2,330],["28227","Mint Hill","Mecklenburg","NC",0.6,420],
-  ["28226","Charlotte","Mecklenburg","NC",-0.3,520],["28277","Charlotte","Mecklenburg","NC",-0.3,550],["28278","Charlotte","Mecklenburg","NC",0.7,420],
-  ["28273","Charlotte","Mecklenburg","NC",0.3,360],["29710","Clover","York","SC",0.9,450],["29732","Rock Hill","York","SC",0.5,330],["29730","Rock Hill","York","SC",0.2,280]
-];
-var STREETS = ["Oak","Maple","Cedar","Hickory","Willow","Magnolia","Dogwood","Laurel","Poplar","Sycamore","Pine","Birch","Chestnut","Holly","Juniper","Mill","Church","Main","Spring","Ridge"];
-var STREET_T = ["St","Rd","Dr","Ln","Ct","Way","Ave","Trl"];
-var BIZ_A = ["Copperleaf","Brightwater","Tallgrass","Ironwood","Silver Fern","Red Clay","Kestrel","Quarry Lane","Blue Heron","Laurel Bend","Stonebrook","Saltbox","Harbor Pine","Fieldstone","Wren Hollow","Juniper Gate","Mill Creek","Granite Row","Cedar Shoals","Northfork","Amberly","Pinecrest","Larkspur","Old Mill","Highbank","Foxglove","Riverbend","Tidewater","Sawgrass","Bramble","Lantern Hill","Gold Mine","Sugar Creek","Paw Creek","Twelve Mile","Catawba Bend","Big Oak","Second Street","Porchlight","Keystone Row"];
-var BIZ_B = {
-  "Builder": ["Homes LLC","Builders Inc","Residential LLC","Homebuilders LLC","Custom Homes LLC"],
-  "Developer": ["Development Group LLC","Land Partners LP","Communities LLC","Land Co LLC"],
-  "Cash investor": ["Capital LLC","Holdings LLC","Property Group LLC","Investments LLC","Equity Partners LLC"],
-  "Flipper": ["Renovations LLC","Home Buyers LLC","Rehab Co LLC","Property Solutions LLC"],
-  "Landlord": ["Rentals LLC","Residential Trust","Housing LLC","Rental Homes LP","Property Management LLC"]
-};
-var FIRST = ["Marcus","Tanya","Derrick","Alicia","Brandon","Keisha","Raymond","Monica","Victor","Lauren","Andre","Priya","Gregory","Denise","Samuel","Erin","Terrence","Holly","Luis","Nadia","Curtis","Joanne","Malik","Rebecca","Owen","Simone","Wesley","Carla","Dwayne","Megan"];
-var LAST = ["Bell","Okafor","Hargrove","Pruitt","Castillo","Whitfield","Nguyen","Barksdale","Tolliver","Ramsey","Sutton","Kowalski","McCrary","Ashby","Delgado","Fenwick","Greer","Lindqvist","Mabry","Osei","Pendergrass","Quintero","Rutledge","Shah","Thibodeaux","Vance","Winslow","Yarbrough","Abernathy","Crowder"];
-
-function buildSample() {
-  var r = rng(20261109);
-  var zips = SAMPLE_ZIPS.map(function (z) { var c = zipCenter(z[0]) || [35.2, -80.8]; return { zip: z[0], city: z[1], county: z[2], st: z[3], g: z[4], price: z[5] * 1000, lat: c[0], lng: c[1] }; });
-  var spanDays = Math.round((NOW - monthsAgo(48)) / MS_DAY);
-  function gauss() { return (r() + r() + r() - 1.5) / 1.5; }
-  function pick(a) { return a[Math.floor(r() * a.length)]; }
-  function weighted(items, wf) { var tot = 0, ws = items.map(function (x) { var w = Math.max(0.001, wf(x)); tot += w; return w; }); var x = r() * tot; for (var i = 0; i < items.length; i++) { x -= ws[i]; if (x <= 0) return items[i]; } return items[items.length - 1]; }
-  var plan = [["Builder", 30, 1], ["Developer", 10, 1], ["Cash investor", 40, 0.55], ["Flipper", 30, 0.5], ["Landlord", 30, 0.6]];
-  var buyers = [], usedNames = {}, n = 0;
-  plan.forEach(function (p) {
-    for (var i = 0; i < p[1]; i++) {
-      var type = p[0], biz = r() < p[2], name;
-      do {
-        name = biz ? pick(BIZ_A) + " " + pick(BIZ_B[type]) : pick(FIRST) + " " + String.fromCharCode(65 + Math.floor(r() * 26)) + ". " + pick(LAST);
-      } while (usedNames[name]);
-      usedNames[name] = 1;
-      var newc = type === "Builder" || type === "Developer";
-      var anchor = weighted(zips, function (z) {
-        if (newc) return Math.pow(1.2 + z.g, 2);
-        if (type === "Flipper") return 1.4 - Math.abs(z.price - 330000) / 400000;
-        if (type === "Landlord") return 1.3 - (z.price - 230000) / 600000;
-        return 1;
-      });
-      var near = zips.slice().sort(function (a, b) { return milesBetween(anchor.lat, anchor.lng, a.lat, a.lng) - milesBetween(anchor.lat, anchor.lng, b.lat, b.lng); });
-      var myZips = near.slice(0, 2 + Math.floor(r() * 4));
-      var perYear = type === "Builder" ? 6 + Math.floor(Math.pow(r(), 2) * 50) : type === "Developer" ? 2 + Math.floor(r() * 6) : type === "Flipper" ? 3 + Math.floor(r() * 16) : 2 + Math.floor(r() * 12);
-      var total = Math.round(perYear * 4 * (0.7 + r() * 0.6));
-      var purchases = [];
-      for (var k = 0; k < total; k++) {
-        var z = myZips[Math.floor(Math.pow(r(), 1.6) * myZips.length)];
-        var t, guard = 0;
-        // time density follows the ZIP's growth slope (rejection sampling); builders follow it hardest
-        // exponential trend: about 60% more buying per year where the slope is 1 (builders), gentler for other buyers
-        var tk = newc ? z.g * 1.9 : z.g * 0.7;
-        do { t = r(); guard++; } while (guard < 80 && r() > Math.exp(tk * t - Math.max(tk, 0)));
-        var d = new Date(monthsAgo(48).getTime() + t * spanDays * MS_DAY);
-        if (d > NOW) d = NOW;
-        var kind, cnt = 1, price;
-        var u = r();
-        if (type === "Builder") kind = u < 0.75 ? "lot" : "existing";
-        else if (type === "Developer") { kind = "lot"; cnt = r() < 0.6 ? 1 : 3 + Math.floor(r() * 9); }
-        else if (type === "Landlord") kind = u < 0.3 ? "new" : "existing";
-        else if (type === "Cash investor") kind = u < 0.1 ? "lot" : u < 0.15 ? "new" : "existing";
-        else kind = "existing";
-        if (kind === "lot") price = z.price * (0.14 + r() * 0.16) * cnt;
-        else if (kind === "new") price = z.price * (0.95 + r() * 0.25);
-        else price = z.price * (type === "Builder" ? 0.55 : type === "Landlord" ? 0.8 : 0.62) * (0.8 + r() * 0.4);
-        var la = z.lat + gauss() * 0.022, lo = z.lng + gauss() * 0.026;
-        purchases.push({ d: isoDate(d), p: Math.round(price / 500) * 500, la: +la.toFixed(5), lo: +lo.toFixed(5), z: z.zip, c: z.city, co: z.county, st: z.st, k: kind, n: cnt, cash: true,
-          a: kind === "lot" && cnt > 1 ? cnt + " lots off " + pick(STREETS) + " " + pick(STREET_T) : (100 + Math.floor(r() * 9800)) + " " + pick(STREETS) + " " + pick(STREET_T) });
-      }
-      purchases.sort(function (a, b) { return a.d < b.d ? 1 : -1; });
-      n++;
-      buyers.push({ id: "s-" + n, name: name, entity: biz ? "business" : "person", type: type, phone: "", email: "", mail: "", sample: true, purchases: purchases });
-    }
-  });
-  return buyers;
-}
-
 /* ---------- storage: artifact database, with browser fallback ---------- */
 var Store = {
   mode: "loading", db: null, canWrite: true, lists: [], cache: {},
@@ -1425,7 +1332,7 @@ function storeErr(e) {
 /* ---------- app state ---------- */
 var DEFAULT_F = { name: "", types: TYPES.slice(), entity: "all", months: 12, min: 1, kinds: ["lot", "new", "existing"], area: "", subject: null, radius: 3, pmin: "", pmax: "", cash: true };
 var S = {
-  sample: null, source: "sample", buyers: [], f: Object.assign({}, DEFAULT_F, lsGet("cbf.filters", {})),
+  source: "fl", buyers: [], f: Object.assign({}, DEFAULT_F, lsGet("cbf.filters", {})),
   sort: { key: "count", dir: -1 }, selected: new Set(), shown: 100, open: null,
   map: Object.assign({ pins: true, heat: false, growth: false, kind: "all", cell: "2", base: "esri", counties: false, sort: "dist" }, lsGet("cbf.map2", {})),
   results: null, tab: "map", selBuyer: null, selP: null, compShown: 150
@@ -1505,7 +1412,6 @@ function compute() {
 function setSource(src) {
   S.source = src; S.selected.clear(); S.shown = 100; S.open = null;
   lsSet("cbf.source", src);
-  if (src === "sample") { S.buyers = S.sample; renderAll(); return Promise.resolve(); }
   if (src === "fl") { S.buyers = FL.buyers; renderAll(); if (!FL.at && !FL.busy) return flLoad(); flMaybeReload(); return Promise.resolve(); }
   var id = src.slice(5);
   S.buyers = []; renderAll(true);
@@ -1517,14 +1423,13 @@ function currentList() { if (S.source.indexOf("list:") !== 0) return null; var i
 function renderSource() {
   var sel = $("source"); sel.innerHTML = "";
   sel.appendChild(el("option", { value: "fl", text: "Florida public records (live)" }));
-  sel.appendChild(el("option", { value: "sample", text: "Sample data (made-up Charlotte buyers)" }));
   if (Store.lists.length) {
     var g = el("optgroup", { label: "Saved lists" });
     Store.lists.forEach(function (l) { g.appendChild(el("option", { value: "list:" + l.id, text: l.name + " (" + (l.count || 0) + ")" })); });
     sel.appendChild(g);
   }
   sel.value = S.source;
-  if (sel.value !== S.source) { sel.value = "sample"; }
+  if (sel.value !== S.source) { sel.value = "fl"; }
   $("flLoad").textContent = S.source === "fl" && FL.at ? "Reload Florida records here" : "Load Florida public records here";
   var add = $("addTo"); var keep = add.value; add.innerHTML = "";
   add.appendChild(el("option", { value: "", text: "Choose a list…" }));
@@ -1535,7 +1440,6 @@ function renderSource() {
   var pill = $("storePill"), txt = $("storeText");
   pill.className = "pill " + (Store.mode === "db" ? "ok" : Store.mode === "local" ? "warn" : "");
   txt.textContent = Store.mode === "db" ? (Store.canWrite ? "Lists saved to this page" : "Lists are view only") : Store.mode === "local" ? "Lists saved in this browser only" : "Connecting storage…";
-  $("sampleBanner").hidden = S.source !== "sample";
   $("removeBtn").hidden = !currentList();
 }
 
@@ -1594,7 +1498,7 @@ function renderTable(loading) {
   if (loading) { box.appendChild(el("div", { className: "empty", text: "Loading list…" })); return; }
   var rows = S.results.rows;
   if (!S.buyers.length) {
-    box.appendChild(el("div", { className: "empty" }, [currentList() ? "This list has no buyers yet. Switch to the sample data or another list, select buyers, and choose Add to list." : "No buyers loaded."]));
+    box.appendChild(el("div", { className: "empty" }, [currentList() ? "This list has no buyers yet. Switch to Florida public records or another list, select buyers, and choose Add to list." : "No buyers loaded."]));
     updateSel(); return;
   }
   if (!rows.length) { box.appendChild(el("div", { className: "empty", text: "No buyers match. Try a longer timeframe, a lower minimum, or fewer filters." })); updateSel(); return; }
@@ -1718,7 +1622,7 @@ function exportPurchases() {
   S.results.rows.forEach(function (r) { r.cur.forEach(function (p) { rows.push(purchaseRow(r.b, p)); }); });
   saveFile(fileBase() + "-purchases.csv", toCsv(rows));
 }
-function fileBase() { var l = currentList(); return (l ? l.name : "sample-buyers").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "buyers"; }
+function fileBase() { var l = currentList(); return (l ? l.name : "florida-buyers").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "buyers"; }
 function saveFile(name, text) {
   useCap("downloads").then(function (dl) {
     if (!dl) { showText(name, text); return; }
@@ -1765,7 +1669,7 @@ function renderLists() {
     card.appendChild(el("div", { className: "meta", text: fmtInt(l.count || 0) + " buyers · " + fmtInt(l.purchases || 0) + " properties · " + (l.source === "csv" ? "imported from CSV" : "built by hand") + " · updated " + fmtDate((l.updatedAt || "").slice(0, 10)) }));
     if (confirming === l.id) {
       card.appendChild(el("div", { className: "confirm" }, ["Delete this list for good?",
-        el("button", { type: "button", className: "btn danger", text: "Yes, delete", onclick: function () { Store.remove(l.id).then(function () { confirming = null; if (S.source === "list:" + l.id) setSource("sample"); else renderAll(); toast("Deleted " + l.name); }).catch(function (e) { toast(storeErr(e)); }); } }),
+        el("button", { type: "button", className: "btn danger", text: "Yes, delete", onclick: function () { Store.remove(l.id).then(function () { confirming = null; if (S.source === "list:" + l.id) setSource("fl"); else renderAll(); toast("Deleted " + l.name); }).catch(function (e) { toast(storeErr(e)); }); } }),
         el("button", { type: "button", className: "btn ghost", text: "Keep it", onclick: function () { confirming = null; renderLists(); } })]));
     } else {
       card.appendChild(el("div", { className: "actions" }, [
@@ -1814,14 +1718,6 @@ function openImport() {
   $("importModal").hidden = false;
 }
 function closeImport() { $("importModal").hidden = true; }
-var DEMO_CSV = "Grantee Name,Property Address,City,State,Zip,Sale Date,Sale Price,Property Type\n" +
-  "Harbor Point Homes LLC,12 Lot Creek Rd,Waxhaw,NC,28173,2026-08-14,92000,Vacant land\n" +
-  "Harbor Point Homes LLC,14 Lot Creek Rd,Waxhaw,NC,28173,2026-09-02,94500,Vacant land\n" +
-  "Harbor Point Homes LLC,88 Brook Ln,Monroe,NC,28110,2025-12-19,61000,Vacant land\n" +
-  "Jordan P. Ellison,415 Cedar Ave,Rock Hill,SC,29730,2026-06-30,168000,Single family\n" +
-  "Jordan P. Ellison,77 Mill St,Rock Hill,SC,29732,2026-03-11,201000,Single family\n" +
-  "Quarry Hill Rentals LLC,9 Spring Ct,Concord,NC,28025,2026-10-05,240000,New construction\n" +
-  "Quarry Hill Rentals LLC,1100 Main St,Kannapolis,NC,,2026-05-21,188000,Single family\n";
 function loadCsvText(text, fname) {
   if (!window.Papa) { toast("The CSV reader didn't load. Check your connection and reload the page."); return; }
   var res = Papa.parse(text, { header: true, skipEmptyLines: "greedy", transformHeader: function (h) { return String(h || "").trim(); } });
@@ -2382,8 +2278,7 @@ var markerFor = new Map(), picking = false, fittedOnce = false;
 /* satellite pictures packaged with the page, as 2048 px tiles. Order: coarse first, sharp on top. */
 var REGIONS = [
   { id: "fl", name: "Florida", when: "Sept to Nov 2026", detail: 40, minZ: 8, maxZ: 12, b: [[24.40, -87.65], [31.05, -79.95]] },
-  { id: "sfl", name: "Southeast, Southwest and Central Florida", inner: true, when: "Sept to Nov 2026", detail: 20, from: 12, minZ: 13, maxZ: 13, b: [[24.50, -83.0], [29.55, -79.95]] },
-  { id: "clt", name: "the Charlotte area", when: "Oct 21 to 22, 2026", detail: 10, minZ: 9, maxZ: 14, b: [[34.90, -81.15], [35.55, -80.50]] }
+  { id: "sfl", name: "Southeast, Southwest and Central Florida", inner: true, when: "Sept to Nov 2026", detail: 20, from: 12, minZ: 13, maxZ: 13, b: [[24.50, -83.0], [29.55, -79.95]] }
 ];
 var regionLayers = [], coverCtl = null;
 function saveMap() { lsSet("cbf.map2", S.map); }
@@ -2406,12 +2301,11 @@ function parseSubject(txt) {
   if (z) {
     var c = zipCenter(z[1]);
     if (!c) return { err: "ZIP " + z[1] + " isn't in the built-in ZIP list." };
-    var sz = SAMPLE_ZIPS.filter(function (r) { return r[0] === z[1]; })[0];
-    return { lat: c[0], lng: c[1], label: "ZIP " + z[1] + (sz ? " (" + sz[1] + ", " + sz[3] + ")" : "") + " center" };
+    return { lat: c[0], lng: c[1], label: "ZIP " + z[1] + " center" };
   }
   return { addr: true, err: "Couldn't look up that address in this view. Drop a pin on the map, or paste the property's coordinates or a Google Maps link." };
 }
-function defaultSubject() { var c = zipCenter("28110"); return c ? { lat: c[0], lng: c[1], label: "ZIP 28110 (Monroe, NC) center" } : null; }
+function defaultSubject() { var c = zipCenter("33901"); return c ? { lat: c[0], lng: c[1], label: "ZIP 33901 (Fort Myers, FL) center" } : null; }
 function setSubjectFromText(txt) {
   var r = parseSubject(txt);
   if (r.err && r.addr) {
@@ -2702,7 +2596,7 @@ function hlPin(c, on) {
 function renderComps(comps) {
   comps = comps || compRows();
   var R = S.results, s = S.f.subject, rad = +S.f.radius || 0;
-  var src = currentList() ? "“" + currentList().name + "”" : S.source === "fl" ? "Florida public records" : "sample data";
+  var src = currentList() ? "“" + currentList().name + "”" : "Florida public records";
   var buyersN = new Set(comps.map(function (c) { return c.r.b.id; })).size;
   var sum = $("compSum"); sum.innerHTML = "";
   sum.appendChild(el("div", null, [el("b", { text: fmtInt(comps.length) }), comps.length === 1 ? " purchase by " : " purchases by ", el("b", { text: fmtInt(buyersN) }), buyersN === 1 ? " buyer " : " buyers ",
@@ -2711,14 +2605,12 @@ function renderComps(comps) {
   if (+S.f.min > 1) notes.push("Only buyers with " + S.f.min + "+ purchases here are shown. Change that on Buyers table.");
   var unplaced = comps.filter(function (c) { return c.p.la == null; }).length;
   if (unplaced) notes.push(fmtInt(unplaced) + (unplaced === 1 ? " purchase has" : " purchases have") + " no location, so " + (unplaced === 1 ? "it isn't" : "they aren't") + " pinned.");
-  if (S.source === "sample") notes.push("Sample data: made-up buyers around Charlotte.");
   if (S.source === "fl") notes.push("Florida public records: each buyer is the current owner with their most recent sale, placed at the parcel. Lee, Sarasota, Miami-Dade, Manatee, Lake, Volusia, Charlotte and Marion come from the county property appraiser and are current to the last few weeks (Marion to the month; Charlotte publishes no prices, so its recent sales show \"price not published\" unless the state roll has the price); other counties come from the yearly state tax roll. These records don't say whether a sale was cash.");
   if (notes.length) sum.appendChild(el("div", { className: "hint", text: notes.join(" ") }));
   renderBuyerCard();
   var list = $("compList"); list.innerHTML = "";
   if (!comps.length) {
-    var farSample = S.source === "sample" && s && milesBetween(s.lat, s.lng, 35.2, -80.85) > 60;
-    list.appendChild(el("div", { className: "empty", text: (S.source === "fl" && !FL.at) ? (FL.busy ? "Loading Florida public records…" : "No Florida records loaded yet. Use Load Florida public records here.") : farSample ? "The built-in sample buyers are all around Charlotte, NC. Choose Florida public records (live) under Buyers from to search Florida." : (s && rad > 0) ? "No matching buyer purchases inside this radius. Try a bigger radius, a longer timeframe or more buyer types." : "No purchases match these filters." }));
+    list.appendChild(el("div", { className: "empty", text: (S.source === "fl" && !FL.at) ? (FL.busy ? "Loading Florida public records…" : "No Florida records loaded yet. Use Load Florida public records here.") : (s && rad > 0) ? "No matching buyer purchases inside this radius. Try a bigger radius, a longer timeframe or more buyer types." : "No purchases match these filters." }));
     return;
   }
   comps.slice(0, S.compShown).forEach(function (c) {
@@ -2834,11 +2726,11 @@ function renderRanks(zs) {
 /* ---------- wire up ---------- */
 function bindSeg(id, fn) { $(id).addEventListener("click", function (e) { var b = e.target.closest("button[data-v]"); if (b) fn(b.dataset.v); }); }
 function init() {
-  S.sample = buildSample();
   DEFAULT_F.subject = defaultSubject();
-  if (!S.f.subject || !isFinite(S.f.subject.lat)) S.f.subject = clone(DEFAULT_F.subject);
-  var savedSrc = lsGet("cbf.source", "sample");
-  S.source = "sample"; S.buyers = S.sample;
+  if (!S.f.subject || !isFinite(S.f.subject.lat) || !inFlorida(S.f.subject.lat, S.f.subject.lng)) S.f.subject = clone(DEFAULT_F.subject);
+  var savedSrc = lsGet("cbf.source", "fl");
+  if (String(savedSrc).indexOf("list:") !== 0) savedSrc = null;
+  S.source = "fl"; S.buyers = FL.buyers;
   $("tab-find").onclick = function () { showTab("find"); };
   $("tab-map").onclick = function () { showTab("map"); };
   $("tab-lists").onclick = function () { showTab("lists"); };
@@ -2885,10 +2777,9 @@ function init() {
     Store.save({ name: n, source: "manual" }, []).then(function () { $("createName").value = ""; toast("Created " + n + ". Add buyers to it from Comps search or Buyers table."); renderAll(); }).catch(function (e) { toast(storeErr(e)); });
   };
   $("importBtn").onclick = openImport;
-  $("templateBtn").onclick = function () { saveFile("buyer-import-template.csv", toCsv([PURCHASE_HEADERS, ["Example Homes LLC", "business", "Builder", "", "", "", "123 Example Rd", "Monroe", "Union", "NC", "28110", "", "", "2026-09-15", "85000", "1", "Lot / land", "yes"]])); };
+  $("templateBtn").onclick = function () { saveFile("buyer-import-template.csv", toCsv([PURCHASE_HEADERS])); };
   $("impCancel").onclick = closeImport;
   $("impGo").onclick = runImport;
-  $("useDemoCsv").onclick = function () { loadCsvText(DEMO_CSV, "example-buyers.csv"); };
   $("impNoDate").onchange = renderImpPreview;
   $("csvFile").onchange = function (e) { var f = e.target.files[0]; if (f) readFile(f); };
   var drop = $("drop");
@@ -2900,7 +2791,7 @@ function init() {
   document.addEventListener("keydown", function (e) { if (e.key === "Escape") { if (!$("importModal").hidden) closeImport(); $("textModal").hidden = true; } });
 
   Store.onChange = function (why) {
-    if (savedSrc && savedSrc !== "sample" && Store.mode !== "loading") {
+    if (savedSrc && Store.mode !== "loading") {
       var want = savedSrc; savedSrc = null;
       if (Store.lists.some(function (l) { return "list:" + l.id === want; })) { setSource(want); return; }
     }
@@ -2908,11 +2799,12 @@ function init() {
       var meta = currentList(), c = Store.cache[meta.id];
       if (!c || c.v !== meta.updatedAt) { setSource(S.source); return; }
     }
-    if (S.source !== "sample" && !currentList() && Store.mode !== "loading") { setSource("sample"); return; }
+    if (S.source.indexOf("list:") === 0 && !currentList() && Store.mode !== "loading") { setSource("fl"); return; }
     renderSource(); updateSel(); if (S.tab === "lists") renderLists();
   };
   renderAll();
   Store.init();
+  if (!savedSrc) setSource("fl");
   var h = (location.hash || "").slice(1);
   showTab(h === "find" || h === "lists" ? h : "map");
   window.addEventListener("hashchange", function () { var h = (location.hash || "").slice(1); if ((h === "map" || h === "lists" || h === "find") && h !== S.tab) showTab(h); });
@@ -2940,7 +2832,7 @@ function readFile(f) {
 }
 
 // expose pure pieces for testing
-window.__CBF__ = { readFile: readFile, parseSubject: parseSubject, setSubject: setSubject, setSubjectFromText: setSubjectFromText, compRows: compRows, selectBuyer: selectBuyer, exportComps: exportComps, getMap: function () { return map; }, S: S, Store: Store, compute: compute, parseImport: parseImport, loadCsvText: loadCsvText, IMP: function () { return IMP; }, setImpMap: function (m) { IMP.map = m; }, areaStats: areaStats, mapPoints: mapPoints, countyAt: countyAt, zipCenter: zipCenter, buildSample: buildSample, runImport: runImport, setSource: setSource, showTab: showTab, addSelectedTo: addSelectedTo, removeSelected: removeSelected, toCsv: toCsv, exportPurchases: exportPurchases };
+window.__CBF__ = { readFile: readFile, parseSubject: parseSubject, setSubject: setSubject, setSubjectFromText: setSubjectFromText, compRows: compRows, selectBuyer: selectBuyer, exportComps: exportComps, getMap: function () { return map; }, S: S, Store: Store, compute: compute, parseImport: parseImport, loadCsvText: loadCsvText, IMP: function () { return IMP; }, setImpMap: function (m) { IMP.map = m; }, areaStats: areaStats, mapPoints: mapPoints, countyAt: countyAt, zipCenter: zipCenter, runImport: runImport, setSource: setSource, showTab: showTab, addSelectedTo: addSelectedTo, removeSelected: removeSelected, toCsv: toCsv, exportPurchases: exportPurchases };
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init); else init();
 })();
 

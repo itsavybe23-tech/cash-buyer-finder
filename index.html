@@ -1938,7 +1938,7 @@ function flCode(v) { var n = parseInt(String(v == null ? "" : v).trim(), 10); re
 // homes, condos, mobile homes, small multifamily, vacant land and acreage; leaves out commercial, industrial and government parcels
 function flKeepUse(code) { return (code >= 0 && code <= 10) || code === 40 || code === 70 || code === 99 || (code >= 51 && code <= 69); }
 function flRingCenter(g) { var r = g && g.rings && g.rings[0]; if (!r || !r.length) return null; var x = 0, y = 0; for (var i = 0; i < r.length; i++) { x += r[i][0]; y += r[i][1]; } return { lo: x / r.length, la: y / r.length }; }
-function flStatus(msg, kind) { var s = $("flStatus"); if (!s) return; s.textContent = (msg || "") + (PERF.on && msg && kind ? perfText() : ""); if (PERF.on && msg && kind) document.title = perfText(); s.className = "hint fl-status" + (kind ? " " + kind : ""); s.hidden = !msg; }
+function flStatus(msg, kind) { var s = $("flStatus"); if (!s) return; s.textContent = (msg || "") + (PERF.on && msg && kind ? perfText() : ""); if (PERF.on && msg && kind) { var mk = PERF.marks, ab = { "page ready": "page", "county records": "county", "first on screen": "first", "state roll": "state", "shown": "done" }, tt = []; for (var q in ab) if (mk[q] != null) tt.push(ab[q] + " " + (mk[q] / 1000).toFixed(1)); document.title = "T " + tt.join(" | "); } s.className = "hint fl-status" + (kind ? " " + kind : ""); s.hidden = !msg; }
 function flQueryRadius() { var r = +S.f.radius || 0; return r > 0 ? Math.min(r, 10) : 5; }
 var MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 function ymd8(s) { s = String(s || "").replace(/\D/g, ""); return s.length >= 8 ? s.slice(0, 4) + "-" + s.slice(4, 6) + "-" + s.slice(6, 8) : ""; }

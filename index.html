@@ -1909,9 +1909,20 @@ var FL_OWN = ",OWN_ADDR1,OWN_CITY,OWN_STATE,OWN_ZIPCD";
 var FL_MAX = 20000;
 var FL = { busy: false, at: null, radius: 0, buyers: [], rows: 0, kept: 0, capped: false, newest: null, err: "", own: true, centroidOk: true, seq: 0, timer: null, srcs: [] };
 function inFlorida(la, lo) { return la >= 24.3 && la <= 31.1 && lo >= -87.7 && lo <= -79.8; }
+/* timings, shown after the record status when the page address has ?perf */
+var PERF = { on: /[?&]perf\b/.test(location.search), req: {}, marks: {} };
+function perfHost(u) { var m = String(u).match(/^https?:\/\/([^/]+)\/(?:[^/]+\/)*?(?:rest\/services\/)?([^/]+)/); return m ? m[1].split(".")[0] + "/" + m[2] : String(u).slice(0, 30); }
+function perfText() {
+  var t = [], k;
+  for (k in PERF.marks) t.push(k + " " + (PERF.marks[k] / 1000).toFixed(1) + "s");
+  for (k in PERF.req) { var q = PERF.req[k]; t.push(k + ": " + q.n + " asks, longest " + (q.max / 1000).toFixed(1) + "s"); }
+  return " [timing: " + t.join("; ") + "]";
+}
 function arcPost(url, params) {
+  var t0 = performance.now(), hk = perfHost(url);
+  function note() { var q = PERF.req[hk] || (PERF.req[hk] = { n: 0, max: 0 }), d = performance.now() - t0; q.n++; if (d > q.max) q.max = d; }
   return fetch(url, { method: "POST", body: new URLSearchParams(params) })
-    .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+    .then(function (r) { note(); if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); }, function (e) { note(); throw e; })
     .then(function (j) { if (j && j.error) { var e = new Error(j.error.message || "Service error"); e.svc = true; throw e; } return j; });
 }
 function flPost(params) { return arcPost(FL_LAYER, params); }
@@ -1919,7 +1930,7 @@ function flCode(v) { var n = parseInt(String(v == null ? "" : v).trim(), 10); re
 // homes, condos, mobile homes, small multifamily, vacant land and acreage; leaves out commercial, industrial and government parcels
 function flKeepUse(code) { return (code >= 0 && code <= 10) || code === 40 || code === 70 || code === 99 || (code >= 51 && code <= 69); }
 function flRingCenter(g) { var r = g && g.rings && g.rings[0]; if (!r || !r.length) return null; var x = 0, y = 0; for (var i = 0; i < r.length; i++) { x += r[i][0]; y += r[i][1]; } return { lo: x / r.length, la: y / r.length }; }
-function flStatus(msg, kind) { var s = $("flStatus"); if (!s) return; s.textContent = msg || ""; s.className = "hint fl-status" + (kind ? " " + kind : ""); s.hidden = !msg; }
+function flStatus(msg, kind) { var s = $("flStatus"); if (!s) return; s.textContent = (msg || "") + (PERF.on && msg && kind ? perfText() : ""); s.className = "hint fl-status" + (kind ? " " + kind : ""); s.hidden = !msg; }
 function flQueryRadius() { var r = +S.f.radius || 0; return r > 0 ? Math.min(r, 10) : 5; }
 var MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 function ymd8(s) { s = String(s || "").replace(/\D/g, ""); return s.length >= 8 ? s.slice(0, 4) + "-" + s.slice(4, 6) + "-" + s.slice(6, 8) : ""; }
@@ -2123,7 +2134,8 @@ function flLoad(force) {
   if (!s) { flStatus("Set a subject property first: an address, a ZIP, or a pin on the map.", "warn"); return Promise.resolve(); }
   if (!inFlorida(s.lat, s.lng)) { flStatus("Live public records cover Florida only. Move the subject property into Florida.", "warn"); return Promise.resolve(); }
   if (typeof fetch !== "function") { flStatus("This browser can't load live records.", "bad"); return Promise.resolve(); }
-  var qr = flQueryRadius(), seq = ++FL.seq;
+  var qr = flQueryRadius(), seq = ++FL.seq, t0 = performance.now();
+  PERF.req = {}; PERF.marks = {}; if (window.__PAGE_T__) PERF.marks["page ready"] = window.__PAGE_T__;
   FL.busy = true; FL.err = ""; FL.queued = false;
   $("flLoad").disabled = true; updBtns();
   flStatus("Loading Florida sales within " + qr + " mi…");
@@ -2144,6 +2156,7 @@ function flLoad(force) {
   }
   return state.then(function (st) { return st; }, function (err) { return { feats: [], err: err }; }).then(function (st) {
     if (seq !== FL.seq) return;
+    PERF.marks["state roll"] = performance.now() - t0;
     FL.centroidOk = stateOpt.centroidOk;
     var present = {};
     st.feats.forEach(function (ft) { var c = +(ft.attributes || {}).CO_NO; if (COUNTY_SRC[c]) present[c] = 1; });
@@ -2157,6 +2170,7 @@ function flLoad(force) {
     return askCounties(Object.keys(present).map(Number)).then(function (cs) { return { st: st, cs: cs }; });
   }).then(function (got) {
     if (!got || seq !== FL.seq) return;
+    PERF.marks["all records"] = performance.now() - t0;
     var st = got.st, cs = got.cs, own = {}, srcs = [], seen = {}, crow = [], capped = !!st.capped;
     // a county's own rows replace the state's rows for that county only when they actually came back
     cs.forEach(function (c) {
@@ -2196,11 +2210,14 @@ function flLoad(force) {
     FL.buyers = res.buyers; FL.at = { lat: s.lat, lng: s.lng }; FL.radius = qr; FL.rows = rows.length; FL.kept = rows.length - res.stats.ownerOcc - res.stats.notSale;
     FL.ownerOcc = res.stats.ownerOcc; FL.capped = capped; FL.srcs = srcs; FL.partial = !!st.partial;
     FL.newest = stateNewest ? { y: Math.floor((stateNewest - 1) / 12), m: ((stateNewest - 1) % 12) + 1 } : null;
-    flStatus(flSummary(res.buyers.length, qr, st, srcs), "ok");
+    PERF.marks["built"] = performance.now() - t0;
+    var sumMsg = flSummary(res.buyers.length, qr, st, srcs);
+    flStatus(sumMsg, "ok");
     if (S.source !== "fl") { S.source = "fl"; lsSet("cbf.source", "fl"); }
     S.buyers = FL.buyers; S.selected.clear(); S.selBuyer = null; S.selP = null; S.compShown = 150;
     if (+S.f.min > 1) S.f.min = 1;
     renderSource(); renderAll();
+    if (PERF.on) { PERF.marks["shown"] = performance.now() - t0; flStatus(sumMsg, "ok"); }
   }).catch(function (err) {
     if (seq !== FL.seq) return;
     FL.err = err && err.message || "network error";
@@ -2833,7 +2850,8 @@ function readFile(f) {
 
 // expose pure pieces for testing
 window.__CBF__ = { readFile: readFile, parseSubject: parseSubject, setSubject: setSubject, setSubjectFromText: setSubjectFromText, compRows: compRows, selectBuyer: selectBuyer, exportComps: exportComps, getMap: function () { return map; }, S: S, Store: Store, compute: compute, parseImport: parseImport, loadCsvText: loadCsvText, IMP: function () { return IMP; }, setImpMap: function (m) { IMP.map = m; }, areaStats: areaStats, mapPoints: mapPoints, countyAt: countyAt, zipCenter: zipCenter, runImport: runImport, setSource: setSource, showTab: showTab, addSelectedTo: addSelectedTo, removeSelected: removeSelected, toCsv: toCsv, exportPurchases: exportPurchases };
-if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init); else init();
+function boot() { init(); window.__PAGE_T__ = performance.now(); }
+if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 })();
 
 </script>

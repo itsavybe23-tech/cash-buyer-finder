@@ -1910,7 +1910,8 @@ var FL_MAX = 20000;
 var FL = { busy: false, at: null, radius: 0, buyers: [], rows: 0, kept: 0, capped: false, newest: null, err: "", own: true, centroidOk: true, seq: 0, timer: null, srcs: [] };
 function inFlorida(la, lo) { return la >= 24.3 && la <= 31.1 && lo >= -87.7 && lo <= -79.8; }
 /* timings, shown after the record status when the page address has ?perf */
-var PERF = { on: /[?&]perf\b/.test(location.search), req: {}, marks: {} };
+var PERF = { on: /[?&]perf\b/.test(location.search), req: {}, marks: {}, exp: ((location.search.match(/[?&]exp=([\w,]+)/) || [])[1] || "").split(",") };
+function exp(k) { return PERF.exp.indexOf(k) >= 0; }
 function perfHost(u) { var m = String(u).match(/^https?:\/\/([^/]+)\/(?:[^/]+\/)*?(?:rest\/services\/)?([^/]+)/); return m ? m[1].split(".")[0] + "/" + m[2] : String(u).slice(0, 30); }
 function perfText() {
   var t = [], k;
@@ -1922,6 +1923,13 @@ function arcPost(url, params) {
   var t0 = performance.now(), hk = perfHost(url);
   function note() { var q = PERF.req[hk] || (PERF.req[hk] = { n: 0, max: 0 }), d = performance.now() - t0; q.n++; if (d > q.max) q.max = d; }
   return fetch(url, { method: "POST", body: new URLSearchParams(params) })
+    .then(function (r) { note(); if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); }, function (e) { note(); throw e; })
+    .then(function (j) { if (j && j.error) { var e = new Error(j.error.message || "Service error"); e.svc = true; throw e; } return j; });
+}
+function arcGet(url, params) {
+  var t0 = performance.now(), hk = perfHost(url) + " GET";
+  function note() { var q = PERF.req[hk] || (PERF.req[hk] = { n: 0, max: 0 }), d = performance.now() - t0; q.n++; if (d > q.max) q.max = d; }
+  return fetch(url + "?" + new URLSearchParams(params))
     .then(function (r) { note(); if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); }, function (e) { note(); throw e; })
     .then(function (j) { if (j && j.error) { var e = new Error(j.error.message || "Service error"); e.svc = true; throw e; } return j; });
 }
@@ -2023,6 +2031,11 @@ function arcRadius(url, base, s, qr, onPage, opt) {
     for (var k in base) p[k] = typeof base[k] === "function" ? base[k]() : base[k];
     // some layers refuse a sorted query once it asks for many fields, so a refused sort is dropped and the rows are sorted here instead
     if (o.noOrder) delete p.orderByFields;
+    if (o.state && exp("geom")) o.centroidOk = false;
+    if (o.state && exp("nowhere")) p.where = "1=1";
+    if (o.state && exp("yr")) p.where = p.where.replace(/ AND SALE_PRC1>=1000/, "");
+    if (o.state && exp("small")) p.resultRecordCount = "1000";
+    if (o.state && exp("get")) o.get = true;
     if (o.centroidOk) { p.returnGeometry = "false"; p.returnCentroid = "true"; }
     else { p.returnGeometry = "true"; p.maxAllowableOffset = "0.0005"; p.geometryPrecision = "5"; }
     return p;
@@ -2041,7 +2054,7 @@ function arcRadius(url, base, s, qr, onPage, opt) {
   function box(env, depth) {
     var mine = [];
     function page(off) {
-      return arcPost(url, params(env, off)).catch(function (err) {
+      return (o.get ? arcGet(url, params(env, off)) : arcPost(url, params(env, off))).catch(function (err) {
         if (off === 0 && err.svc) {
           // each fallback is tried once: fewer owner fields, then parcel shapes in place of centroids, then no server-side sort
           if (o.retry && o.retry()) return { again: true };
@@ -2140,7 +2153,7 @@ function flLoad(force) {
   $("flLoad").disabled = true; updBtns();
   flStatus("Loading Florida sales within " + qr + " mi…");
   var minYear = NOW.getFullYear() - 4;
-  var stateOpt = { centroidOk: FL.centroidOk, envelope: true, noOrder: true, retry: function () { if (!FL.own) return false; FL.own = false; return true; } };
+  var stateOpt = { state: true, centroidOk: FL.centroidOk, envelope: true, noOrder: true, retry: function () { if (!FL.own) return false; FL.own = false; return true; } };
   var state = arcRadius(FL_LAYER, { where: "SALE_YR1>=" + minYear + " AND SALE_PRC1>=1000", outFields: function () { return FL_FIELDS + (FL.own ? FL_OWN : ""); },
     orderByFields: "SALE_YR1 DESC,SALE_MO1 DESC" }, s, qr, function (n) { if (seq === FL.seq) flStatus("Loading Florida sales within " + qr + " mi… " + fmtInt(n) + " so far"); }, stateOpt);
   // the county the subject sits in is always asked, so its own records still load if the state layer is down
@@ -2192,7 +2205,7 @@ function flLoad(force) {
     var rows = [], stateNewest = 0;
     st.feats.forEach(function (ft) {
       var a = ft.attributes || {};
-      if (own[+a.CO_NO] || !flKeepUse(flCode(a.DOR_UC))) return;
+      if (own[+a.CO_NO] || !flKeepUse(flCode(a.DOR_UC)) || !(+a.SALE_YR1 >= minYear && +a.SALE_PRC1 >= 1000)) return;
       var c = featCenter(ft), r = {};
       for (var k in a) r[k] = a[k] == null ? "" : a[k];
       r.__lat = c ? c.la : ""; r.__lng = c ? c.lo : ""; r.__county = FL_COUNTY[+a.CO_NO] || ""; r.__date = ""; r.__occ = "";

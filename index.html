@@ -1984,7 +1984,7 @@ var COUNTY_SRC = {
     row: function (a) { return { id: a.AltKey, date: msDate(a.LastSaleDate), price: a.LastSalePrice, dor: String(a.LandUseCode || "").slice(0, 2), vi: "", built: a.YearBuilt,
       name: a.OwnerName, addr: a.PropertyAddress, city: "", zip: "", mail: a.OwnerAddress, mcity: a.OwnerCity, mst: a.OwnerState, mzip: a.OwnerZip }; } },
   // Charlotte publishes owners and sale dates but no sale prices; prices come from the state roll when it has the same sale
-  18: { name: "Charlotte", noPrice: true, url: "https://agis3.charlottecountyfl.gov/arcgis/rest/services/Essentials/CCGISLayers/MapServer/27/query",
+  18: { name: "Charlotte", noPrice: true, noCentroid: true, url: "https://agis3.charlottecountyfl.gov/arcgis/rest/services/Essentials/CCGISLayers/MapServer/27/query",
     fields: "ACCOUNT,ownersname,mailingaddress,suite,mailingaddress2,city,state,zipcode,FullPropertyAddress,usecode,ishomestead,lastsaleno70cent",
     where: function (y) { return "lastsaleno70cent >= DATE '" + y + "-01-01'"; }, order: "lastsaleno70cent DESC",
     row: function (a) { var d = msDate(a.lastsaleno70cent);
@@ -1999,7 +1999,7 @@ var COUNTY_SRC = {
       name: a.OWNER1, addr: a.ADDRFULL, city: a.CITYNAME, zip: a.ZIP1, mail: a.MAILADDR1, mcity: a.MAILCITY, mst: a.MAILSTATE, mzip: a.MAILZIP,
       occ: cleanStr(a.HXFLAG).toUpperCase() === "Y" }; } },
   // Marion publishes the sale year and month only, so its dates are shown to the month
-  52: { name: "Marion", monthOnly: true, url: "https://gis.marionfl.org/public/rest/services/General/ParcelCentroids/FeatureServer/0/query",
+  52: { name: "Marion", monthOnly: true, noCentroid: true, url: "https://gis.marionfl.org/public/rest/services/General/ParcelCentroids/FeatureServer/0/query",
     fields: "PARCEL,NAME,ADD_1,ADD_2,ADD_3,ADD_4,ZIP,SITUS_1,YR1,MO1,PR_1,VI1,PC,YRBLT1,HX",
     where: function (y) { return "YR1 >= " + y + " AND PR_1 >= 1000"; }, order: "YR1 DESC,MO1 DESC",
     row: function (a) {
@@ -2221,7 +2221,7 @@ function flLoad(force) {
   function askCounties(codes) {
     return Promise.all(codes.map(function (code) {
       var src = COUNTY_SRC[code];
-      return arcRadius(src.url, { where: src.where(minYear), outFields: src.fields, orderByFields: src.order }, s, qr, null, { centroidOk: true })
+      return arcRadius(src.url, { where: src.where(minYear), outFields: src.fields, orderByFields: src.order }, s, qr, null, { centroidOk: !src.noCentroid })
         .then(function (r) { return { code: code, src: src, feats: r.feats, capped: r.capped }; })
         .catch(function (err) { return { code: code, src: src, err: err && err.message || "error" }; });
     }));

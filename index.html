@@ -1010,7 +1010,7 @@ textarea.out { min-height: 200px; font-family: var(--font-data); font-size: 12px
 
   <section id="view-lists" role="tabpanel" aria-labelledby="tab-lists" class="wrap" hidden>
     <div class="lists-head">
-      <label class="field"><span>New list</span><input type="text" id="createName" placeholder="e.g. Union County builders"></label>
+      <label class="field"><span>New list</span><input type="text" id="createName" placeholder="e.g. Lee County builders"></label>
       <button class="btn primary" id="createBtn" type="button">Create list</button>
       <button class="btn" id="importBtn" type="button">Import CSV into a new list</button>
       <button class="btn ghost" id="templateBtn" type="button">Get a CSV template</button>
@@ -1938,7 +1938,7 @@ function flCode(v) { var n = parseInt(String(v == null ? "" : v).trim(), 10); re
 // homes, condos, mobile homes, small multifamily, vacant land and acreage; leaves out commercial, industrial and government parcels
 function flKeepUse(code) { return (code >= 0 && code <= 10) || code === 40 || code === 70 || code === 99 || (code >= 51 && code <= 69); }
 function flRingCenter(g) { var r = g && g.rings && g.rings[0]; if (!r || !r.length) return null; var x = 0, y = 0; for (var i = 0; i < r.length; i++) { x += r[i][0]; y += r[i][1]; } return { lo: x / r.length, la: y / r.length }; }
-function flStatus(msg, kind) { var s = $("flStatus"); if (!s) return; s.textContent = (msg || "") + (PERF.on && msg && kind ? perfText() : ""); s.className = "hint fl-status" + (kind ? " " + kind : ""); s.hidden = !msg; }
+function flStatus(msg, kind) { var s = $("flStatus"); if (!s) return; s.textContent = (msg || "") + (PERF.on && msg && kind ? perfText() : ""); if (PERF.on && msg && kind) document.title = perfText(); s.className = "hint fl-status" + (kind ? " " + kind : ""); s.hidden = !msg; }
 function flQueryRadius() { var r = +S.f.radius || 0; return r > 0 ? Math.min(r, 10) : 5; }
 var MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 function ymd8(s) { s = String(s || "").replace(/\D/g, ""); return s.length >= 8 ? s.slice(0, 4) + "-" + s.slice(4, 6) + "-" + s.slice(6, 8) : ""; }
@@ -2142,23 +2142,82 @@ function countyRow(src, code, ft) {
     OWN_ADDR1: cleanStr(x.mail), OWN_CITY: cleanStr(x.mcity), OWN_STATE: cleanStr(x.mst), OWN_ZIPCD: mz,
     __date: x.date, __occ: x.occ ? "1" : "", __np: src.noPrice && !(+x.price > 100) ? "1" : "", __id: cleanStr(x.id), __lat: c ? c.la : "", __lng: c ? c.lo : "", __county: FL_COUNTY[code] || src.name };
 }
+/* recent Florida searches are kept in this browser for a few hours, so opening the page again or going back to an earlier spot shows them at once; Refresh always reloads */
+var FL_CACHE_HOURS = 6, FL_CACHE_KEEP = 6;
+function flCacheDb() {
+  if (flCacheDb.p) return flCacheDb.p;
+  flCacheDb.p = new Promise(function (ok) {
+    try {
+      var rq = indexedDB.open("cbf-fl-cache", 1);
+      rq.onupgradeneeded = function () { rq.result.createObjectStore("q", { keyPath: "id" }); };
+      rq.onsuccess = function () { ok(rq.result); }; rq.onerror = function () { ok(null); }; rq.onblocked = function () { ok(null); };
+    } catch (e) { ok(null); }
+  });
+  return flCacheDb.p;
+}
+function flCacheAll() {
+  return flCacheDb().then(function (db) {
+    if (!db) return [];
+    return new Promise(function (ok) {
+      try { var rq = db.transaction("q").objectStore("q").getAll(); rq.onsuccess = function () { ok(rq.result || []); }; rq.onerror = function () { ok([]); }; } catch (e) { ok([]); }
+    });
+  });
+}
+function flCacheGet(s, qr, minYear) {
+  if (PERF.on && exp("nocache")) return Promise.resolve(null);
+  return flCacheAll().then(function (all) {
+    var now = Date.now(), best = null;
+    all.forEach(function (c) {
+      if (c.v !== 1 || c.minYear !== minYear || now - c.at > FL_CACHE_HOURS * 3600e3) return;
+      if (milesBetween(c.lat, c.lng, s.lat, s.lng) + qr > c.r + 0.05) return;
+      if (!best || c.at > best.at) best = c;
+    });
+    return best;
+  }).catch(function () { return null; });
+}
+function flCachePut(s, qr, minYear, R) {
+  if (R.partial || R.stErr || R.bad) return;
+  var rec = { id: s.lat.toFixed(5) + "," + s.lng.toFixed(5) + "," + qr, v: 1, at: Date.now(), lat: s.lat, lng: s.lng, r: qr, minYear: minYear, R: R };
+  flCacheAll().then(function (all) {
+    return flCacheDb().then(function (db) {
+      if (!db) return;
+      try {
+        var os = db.transaction("q", "readwrite").objectStore("q");
+        all.filter(function (c) { return c.id !== rec.id; }).sort(function (a, b) { return b.at - a.at; }).slice(FL_CACHE_KEEP - 1).forEach(function (c) { os.delete(c.id); });
+        os.put(rec);
+      } catch (e) {}
+    });
+  }).catch(function () {});
+}
+// the counties a search circle touches, from the built-in county shapes: the centre, and points on two rings around it
+function flCirclePoints(s, qr) {
+  var pts = [[s.lat, s.lng]], k = 69 * Math.cos(s.lat * Math.PI / 180);
+  [qr / 2, qr].forEach(function (d, j) {
+    for (var i = 0; i < 16; i++) { var ang = (i + j * 0.5) * Math.PI / 8; pts.push([s.lat + Math.cos(ang) * d / 69, s.lng + Math.sin(ang) * d / k]); }
+  });
+  return pts;
+}
+function flOwnCounties(s, qr) {
+  var out = {};
+  flCirclePoints(s, qr).forEach(function (p) {
+    var cn = countyAt(p[0], p[1]);
+    if (cn && cn.st === "FL") for (var cd in COUNTY_SRC) if (COUNTY_SRC[cd].name === cn.name) out[cd] = 1;
+  });
+  return Object.keys(out).map(Number);
+}
 function flLoad(force) {
   var s = S.f.subject;
   if (!s) { flStatus("Set a subject property first: an address, a ZIP, or a pin on the map.", "warn"); return Promise.resolve(); }
   if (!inFlorida(s.lat, s.lng)) { flStatus("Live public records cover Florida only. Move the subject property into Florida.", "warn"); return Promise.resolve(); }
   if (typeof fetch !== "function") { flStatus("This browser can't load live records.", "bad"); return Promise.resolve(); }
+  clearTimeout(FL.timer);
   var qr = flQueryRadius(), seq = ++FL.seq, t0 = performance.now();
   PERF.req = {}; PERF.marks = {}; if (window.__PAGE_T__) PERF.marks["page ready"] = window.__PAGE_T__;
   FL.busy = true; FL.err = ""; FL.queued = false;
   $("flLoad").disabled = true; updBtns();
   flStatus("Loading Florida sales within " + qr + " mi…");
-  var minYear = NOW.getFullYear() - 4;
-  var stateOpt = { state: true, centroidOk: FL.centroidOk, envelope: true, noOrder: true, retry: function () { if (!FL.own) return false; FL.own = false; return true; } };
-  var state = arcRadius(FL_LAYER, { where: "SALE_YR1>=" + minYear + " AND SALE_PRC1>=1000", outFields: function () { return FL_FIELDS + (FL.own ? FL_OWN : ""); },
-    orderByFields: "SALE_YR1 DESC,SALE_MO1 DESC" }, s, qr, function (n) { if (seq === FL.seq) flStatus("Loading Florida sales within " + qr + " mi… " + fmtInt(n) + " so far"); }, stateOpt);
-  // the county the subject sits in is always asked, so its own records still load if the state layer is down
-  var here = countyAt(s.lat, s.lng), hereCode = 0;
-  if (here) for (var cc in FL_COUNTY) if (FL_COUNTY[cc] === here.name && here.st === "FL") hereCode = +cc;
+  var minYear = NOW.getFullYear() - 4, seqOld = PERF.on && exp("seq");
+  function mark(k) { if (!PERF.marks[k]) PERF.marks[k] = performance.now() - t0; }
   function askCounties(codes) {
     return Promise.all(codes.map(function (code) {
       var src = COUNTY_SRC[code];
@@ -2167,36 +2226,21 @@ function flLoad(force) {
         .catch(function (err) { return { code: code, src: src, err: err && err.message || "error" }; });
     }));
   }
-  return state.then(function (st) { return st; }, function (err) { return { feats: [], err: err }; }).then(function (st) {
-    if (seq !== FL.seq) return;
-    PERF.marks["state roll"] = performance.now() - t0;
-    FL.centroidOk = stateOpt.centroidOk;
-    var present = {};
-    st.feats.forEach(function (ft) { var c = +(ft.attributes || {}).CO_NO; if (COUNTY_SRC[c]) present[c] = 1; });
-    if (hereCode && COUNTY_SRC[hereCode]) present[hereCode] = 1;
-    // parcels across the line in a neighbouring county with its own layer
-    for (var i = 0; i < 8; i++) {
-      var ang = i * Math.PI / 4, la = s.lat + Math.cos(ang) * qr / 69, lo = s.lng + Math.sin(ang) * qr / (69 * Math.cos(s.lat * Math.PI / 180));
-      var cn = countyAt(la, lo);
-      if (cn && cn.st === "FL") for (var cd in COUNTY_SRC) if (COUNTY_SRC[cd].name === cn.name) present[cd] = 1;
-    }
-    return askCounties(Object.keys(present).map(Number)).then(function (cs) { return { st: st, cs: cs }; });
-  }).then(function (got) {
-    if (!got || seq !== FL.seq) return;
-    PERF.marks["all records"] = performance.now() - t0;
-    var st = got.st, cs = got.cs, own = {}, srcs = [], seen = {}, crow = [], capped = !!st.capped;
-    // a county's own rows replace the state's rows for that county only when they actually came back
+  // turns what came back into rows: a county's own rows replace the state's rows for that county only when they actually came back
+  function makeRows(st, cs, partial) {
+    var own = {}, srcs = [], seen = {}, crow = [], capped = !!st.capped, bad = false;
     cs.forEach(function (c) {
-      if (c.err) { srcs.push({ name: c.src.name, err: c.err }); return; }
-      var got = [], top = "", fill = c.src.noPrice ? flPriceIndex(st.feats, c.code) : null, filled = 0, nop = 0;
+      if (c.err) { bad = true; srcs.push({ name: c.src.name, err: c.err }); return; }
+      var got = [], top = "", fill = c.src.noPrice && !partial ? flPriceIndex(st.feats, c.code) : null, filled = 0, nop = 0;
       c.feats.forEach(function (ft) {
         var r = countyRow(c.src, c.code, ft); if (!r) return;
         var key = c.code + ":" + (r.__id || r.__lat + "," + r.__lng); if (seen[key]) return; seen[key] = 1;
         if (r.__date > top) top = r.__date;
         if (fill && r.__np) { var pr = flPriceFor(fill, r); if (pr) { r.SALE_PRC1 = pr; r.__np = ""; filled++; } else nop++; }
+        else if (r.__np) nop++;
         got.push(r);
       });
-      if (!got.length) { srcs.push({ name: c.src.name, err: "no sales came back" }); return; }
+      if (!got.length) { bad = true; srcs.push({ name: c.src.name, err: "no sales came back" }); return; }
       own[c.code] = 1; capped = capped || c.capped;
       Array.prototype.push.apply(crow, got);
       srcs.push({ name: c.src.name, n: got.length, newest: top, monthOnly: !!c.src.monthOnly, noPrice: !!c.src.noPrice, filled: filled, nop: nop });
@@ -2214,23 +2258,69 @@ function flLoad(force) {
       rows.push(r);
     });
     Array.prototype.push.apply(rows, crow);
-    var keep = IMP;
-    IMP = { file: "", rows: rows, cols: [], fl: true, flMail: FL.own ? ["OWN_CITY", "OWN_STATE", "OWN_ZIPCD"] : [],
+    return { rows: rows, srcs: srcs, capped: capped, stateNewest: stateNewest, stErr: st.err ? String(st.err.message || st.err) : "", stPartial: !!st.partial, own: !!FL.own, partial: !!partial, bad: bad };
+  }
+  // shows rows on the map and in the tables; while partial, the state tax roll is still loading
+  function show(R, cachedAt) {
+    var keep = IMP, rows = R.rows;
+    IMP = { file: "", rows: rows, cols: [], fl: true, flMail: R.own ? ["OWN_CITY", "OWN_STATE", "OWN_ZIPCD"] : [],
       map: { name: "OWN_NAME", price: "SALE_PRC1", year: "SALE_YR1", month: "SALE_MO1", date: "__date", occ: "__occ", np: "__np", vacant: "VI_CD1", built: "ACT_YR_BLT", address: "PHY_ADDR1", city: "PHY_CITY", zip: "PHY_ZIPCD", lat: "__lat", lng: "__lng", county: "__county", mail: "OWN_ADDR1" } };
     var res;
     try { res = parseImport(rows, false); } finally { IMP = keep; }
     res.buyers.forEach(function (b) { b.src = "fl"; b.purchases.sort(function (x, y) { return x.d < y.d ? 1 : -1; }); });
-    FL.buyers = res.buyers; FL.at = { lat: s.lat, lng: s.lng }; FL.radius = qr; FL.rows = rows.length; FL.kept = rows.length - res.stats.ownerOcc - res.stats.notSale;
-    FL.ownerOcc = res.stats.ownerOcc; FL.capped = capped; FL.srcs = srcs; FL.partial = !!st.partial;
-    FL.newest = stateNewest ? { y: Math.floor((stateNewest - 1) / 12), m: ((stateNewest - 1) % 12) + 1 } : null;
-    PERF.marks["built"] = performance.now() - t0;
-    var sumMsg = flSummary(res.buyers.length, qr, st, srcs);
-    flStatus(sumMsg, "ok");
+    var at = R.at || { lat: s.lat, lng: s.lng }, rad = R.r || qr;
+    FL.buyers = res.buyers; FL.at = { lat: at.lat, lng: at.lng }; FL.radius = rad; FL.rows = rows.length; FL.kept = rows.length - res.stats.ownerOcc - res.stats.notSale;
+    FL.ownerOcc = res.stats.ownerOcc; FL.capped = R.capped; FL.srcs = R.srcs; FL.partial = R.stPartial;
+    var sn = R.stateNewest;
+    FL.newest = sn ? { y: Math.floor((sn - 1) / 12), m: ((sn - 1) % 12) + 1 } : null;
+    var msg = flSummary(res.buyers.length, rad, { err: R.stErr }, R.srcs);
+    if (R.partial) msg = "Showing county records first; still loading the state tax roll for the rest of the area… " + msg.replace(/ (Other counties come from|From) the state tax roll, newest sale [^.]*\./, "").replace(/ [A-Za-z-]+ doesn't publish sale prices: [^.]*\./, "");
+    else if (cachedAt) { var mins = Math.round((Date.now() - cachedAt) / 60000); msg += " Saved from your search " + (mins < 1 ? "a moment" : mins < 60 ? mins + (mins === 1 ? " minute" : " minutes") : Math.round(mins / 60) + (mins < 90 ? " hour" : " hours")) + " ago; Refresh results reloads it."; }
+    mark(R.partial ? "first shown" : "built");
+    flStatus(msg, R.partial ? "" : "ok");
     if (S.source !== "fl") { S.source = "fl"; lsSet("cbf.source", "fl"); }
+    var keepSel = R.final && FL.shownPartial ? { b: S.selBuyer, sel: new Set(S.selected) } : null;
     S.buyers = FL.buyers; S.selected.clear(); S.selBuyer = null; S.selP = null; S.compShown = 150;
+    if (keepSel) { if (FL.buyers.some(function (b) { return b.id === keepSel.b; })) S.selBuyer = keepSel.b; keepSel.sel.forEach(function (id) { if (FL.buyers.some(function (b) { return b.id === id; })) S.selected.add(id); }); }
     if (+S.f.min > 1) S.f.min = 1;
     renderSource(); renderAll();
-    if (PERF.on) { PERF.marks["shown"] = performance.now() - t0; flStatus(sumMsg, "ok"); }
+    if (PERF.on) { mark(R.partial ? "first on screen" : "shown"); flStatus(msg, R.partial ? "" : "ok"); }
+  }
+  FL.shownPartial = false;
+  var cached = force ? Promise.resolve(null) : flCacheGet(s, qr, minYear);
+  return cached.then(function (hit) {
+    if (seq !== FL.seq) return;
+    if (hit) { var R0 = hit.R; R0.at = { lat: hit.lat, lng: hit.lng }; R0.r = hit.r; R0.final = true; show(R0, hit.at); return; }
+    var stateOpt = { state: true, centroidOk: FL.centroidOk, envelope: true, noOrder: true, retry: function () { if (!FL.own) return false; FL.own = false; return true; } };
+    var stDone = false;
+    var state = arcRadius(FL_LAYER, { where: "SALE_YR1>=" + minYear + " AND SALE_PRC1>=1000", outFields: function () { return FL_FIELDS + (FL.own ? FL_OWN : ""); },
+      orderByFields: "SALE_YR1 DESC,SALE_MO1 DESC" }, s, qr, function (n) { if (seq === FL.seq && !FL.shownPartial) flStatus("Loading Florida sales within " + qr + " mi… " + fmtInt(n) + " so far"); }, stateOpt)
+      .then(function (st) { return st; }, function (err) { return { feats: [], err: err }; })
+      .then(function (st) { stDone = true; mark("state roll"); FL.centroidOk = stateOpt.centroidOk; return st; });
+    // counties with their own records are asked at the same time as the state roll, not after it
+    var early = seqOld ? [] : flOwnCounties(s, qr);
+    var cty = early.length ? askCounties(early) : Promise.resolve([]);
+    cty.then(function (cs) {
+      mark("county records");
+      if (seq !== FL.seq || stDone || !cs.some(function (c) { return !c.err && c.feats && c.feats.length; })) return;
+      try { var R = makeRows({ feats: [] }, cs, true); if (R.rows.length) { show(R); FL.shownPartial = true; } } catch (e) {}
+    });
+    return Promise.all([state, cty]).then(function (both) {
+      if (seq !== FL.seq) return;
+      var st = both[0], cs = both[1], asked = {}, more = {};
+      early.forEach(function (c) { asked[c] = 1; });
+      st.feats.forEach(function (ft) { var c = +(ft.attributes || {}).CO_NO; if (COUNTY_SRC[c] && !asked[c]) more[c] = 1; });
+      if (seqOld) flOwnCounties(s, qr).forEach(function (c) { if (!asked[c]) more[c] = 1; });
+      var extra = Object.keys(more).map(Number);
+      return (extra.length ? askCounties(extra) : Promise.resolve([])).then(function (cs2) { return { st: st, cs: cs.concat(cs2) }; });
+    }).then(function (got) {
+      if (!got || seq !== FL.seq) return;
+      mark("all records");
+      var R = makeRows(got.st, got.cs, false);
+      R.final = true;
+      show(R);
+      flCachePut(s, qr, minYear, R);
+    });
   }).catch(function (err) {
     if (seq !== FL.seq) return;
     FL.err = err && err.message || "network error";
@@ -2267,7 +2357,7 @@ function flNeedsLoad() {
 }
 function flMaybeReload() {
   if (S.source !== "fl" || FL.busy || !flNeedsLoad()) return;
-  clearTimeout(FL.timer); FL.timer = setTimeout(function () { flLoad(); }, 500);
+  clearTimeout(FL.timer); FL.timer = setTimeout(function () { if (!FL.busy && flNeedsLoad()) flLoad(); }, 500);
 }
 // the Update results buttons: lit up when the records on screen don't cover the current subject, radius or filters yet
 function updBtns() {

@@ -1938,7 +1938,7 @@ function flCode(v) { var n = parseInt(String(v == null ? "" : v).trim(), 10); re
 // homes, condos, mobile homes, small multifamily, vacant land and acreage; leaves out commercial, industrial and government parcels
 function flKeepUse(code) { return (code >= 0 && code <= 10) || code === 40 || code === 70 || code === 99 || (code >= 51 && code <= 69); }
 function flRingCenter(g) { var r = g && g.rings && g.rings[0]; if (!r || !r.length) return null; var x = 0, y = 0; for (var i = 0; i < r.length; i++) { x += r[i][0]; y += r[i][1]; } return { lo: x / r.length, la: y / r.length }; }
-function flStatus(msg, kind) { var s = $("flStatus"); if (!s) return; s.textContent = (msg || "") + (PERF.on && msg && kind ? perfText() : ""); if (PERF.on && msg && kind) { var mk = PERF.marks, ab = { "page ready": "page", "county records": "county", "first on screen": "first", "state roll": "state", "shown": "done" }, tt = []; for (var q in ab) if (mk[q] != null) tt.push(ab[q] + " " + (mk[q] / 1000).toFixed(1)); document.title = "T " + tt.join(" | "); } s.className = "hint fl-status" + (kind ? " " + kind : ""); s.hidden = !msg; }
+function flStatus(msg, kind) { var s = $("flStatus"); if (!s) return; s.textContent = (msg || "") + (PERF.on && msg && kind ? perfText() : ""); if (PERF.on && msg && kind) { var mk = PERF.marks, ab = { "page ready": "page", "county records": "county", "first on screen": "first", "state roll": "state", "shown": "done" }, tt = []; for (var q in ab) if (mk[q] != null) tt.push(ab[q] + " " + (mk[q] / 1000).toFixed(1)); if (mk.shown != null) tt.push("n " + FL.kept + "/" + FL.buyers.length + "/" + FL.rows); document.title = "T " + tt.join(" | "); } s.className = "hint fl-status" + (kind ? " " + kind : ""); s.hidden = !msg; }
 function flQueryRadius() { var r = +S.f.radius || 0; return r > 0 ? Math.min(r, 10) : 5; }
 var MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 function ymd8(s) { s = String(s || "").replace(/\D/g, ""); return s.length >= 8 ? s.slice(0, 4) + "-" + s.slice(4, 6) + "-" + s.slice(6, 8) : ""; }
@@ -2038,6 +2038,8 @@ function arcRadius(url, base, s, qr, onPage, opt) {
     if (o.state && exp("get")) o.get = true;
     if (o.centroidOk) { p.returnGeometry = "false"; p.returnCentroid = "true"; }
     else { p.returnGeometry = "true"; p.maxAllowableOffset = "0.0005"; p.geometryPrecision = "5"; }
+    // a GET with cacheHint is kept by the layer's CDN, so the same tile asked again, by anyone, comes back at once
+    if (o.get) p.cacheHint = "true";
     return p;
   }
   function keep(ft) {
@@ -2054,8 +2056,12 @@ function arcRadius(url, base, s, qr, onPage, opt) {
   function box(env, depth) {
     var mine = [];
     function page(off) {
+      var ver = o.ver || 0;
       return (o.get ? arcGet(url, params(env, off)) : arcPost(url, params(env, off))).catch(function (err) {
+        // another box already changed the options after this ask went out, so just ask again with them
+        if (off === 0 && err.svc && (o.ver || 0) !== ver) return { again: true };
         if (off === 0 && err.svc) {
+          o.ver = ver + 1;
           // each fallback is tried once: fewer owner fields, then parcel shapes in place of centroids, then no server-side sort
           if (o.retry && o.retry()) return { again: true };
           if (o.centroidOk) { o.centroidOk = false; return { again: true }; }
@@ -2065,7 +2071,7 @@ function arcRadius(url, base, s, qr, onPage, opt) {
       }).then(function (j) {
         if (j && j.again) return page(off);
         var f = j.features || [], got = f.length;
-        if (off === 0 && got && o.centroidOk && !(f[0] || {}).centroid) { o.centroidOk = false; return page(0); }
+        if (off === 0 && got && o.centroidOk && !(f[0] || {}).centroid) { if ((o.ver || 0) === ver) { o.centroidOk = false; o.ver = ver + 1; } return page(0); }
         Array.prototype.push.apply(mine, f);
         if (onPage) onPage(all.length + mine.length);
         if (j.exceededTransferLimit && got && all.length + mine.length < FL_MAX) return page(off + got);
@@ -2080,10 +2086,18 @@ function arcRadius(url, base, s, qr, onPage, opt) {
     });
   }
   if (!o.envelope) return box(null, 0).then(function () { return { feats: all, capped: capped || all.length >= FL_MAX }; });
-  // a wide search is asked as a grid of boxes about two miles across, three at a time, because one big box can run past the server's time limit
-  var n = Math.max(1, Math.min(6, Math.ceil(qr / 1))), boxes = [];
-  for (var iy = 0; iy < n; iy++) for (var ix = 0; ix < n; ix++) {
-    var e = [s.lng - dlo + 2 * dlo * ix / n, s.lat - dla + 2 * dla * iy / n, s.lng - dlo + 2 * dlo * (ix + 1) / n, s.lat - dla + 2 * dla * (iy + 1) / n];
+  // a wide search is asked as a grid of boxes about two miles across, because one big box can run past the server's time limit
+  var boxes = [], cand = [];
+  if (o.grid) {
+    // fixed tiles on a 0.03 degree grid, so every search over the same ground asks the very same tiles and can reuse the CDN's copy
+    var G = o.grid, gx0 = Math.floor((s.lng - dlo) / G), gx1 = Math.floor((s.lng + dlo) / G), gy0 = Math.floor((s.lat - dla) / G), gy1 = Math.floor((s.lat + dla) / G);
+    for (var gy = gy0; gy <= gy1; gy++) for (var gx = gx0; gx <= gx1; gx++) cand.push([+(gx * G).toFixed(4), +(gy * G).toFixed(4), +((gx + 1) * G).toFixed(4), +((gy + 1) * G).toFixed(4)]);
+  } else {
+    var n = Math.max(1, Math.min(6, Math.ceil(qr / 1)));
+    for (var iy = 0; iy < n; iy++) for (var ix = 0; ix < n; ix++) cand.push([s.lng - dlo + 2 * dlo * ix / n, s.lat - dla + 2 * dla * iy / n, s.lng - dlo + 2 * dlo * (ix + 1) / n, s.lat - dla + 2 * dla * (iy + 1) / n]);
+  }
+  for (var ci = 0; ci < cand.length; ci++) {
+    var e = cand[ci];
     // skip boxes that sit wholly outside the circle
     var nx = Math.max(e[0], Math.min(s.lng, e[2])), ny = Math.max(e[1], Math.min(s.lat, e[3]));
     if (milesBetween(s.lat, s.lng, ny, nx) <= qr) boxes.push(e);
@@ -2096,9 +2110,11 @@ function arcRadius(url, base, s, qr, onPage, opt) {
     var e = boxes[next++];
     return box(e, 0).catch(function (err) { failed++; lastErr = err; }).then(worker);
   }
-  var first = box(boxes[0], 0); next = 1;
+  var conc = o.conc || 3, first;
+  if (o.grid) { first = Promise.resolve(); }
   // the first box runs alone so a refused field list or sort is settled once before the rest start
-  return first.then(function () { return Promise.all([worker(), worker(), worker()]); }).then(function () {
+  else { first = box(boxes[0], 0); next = 1; }
+  return first.then(function () { var ws = []; for (var w = 0; w < conc; w++) ws.push(worker()); return Promise.all(ws); }).then(function () {
     if (failed && failed >= boxes.length - 1 && !all.length) throw lastErr;
     return { feats: all, capped: capped || all.length >= FL_MAX, partial: failed > 0 };
   });
@@ -2358,6 +2374,7 @@ function flLoad(force) {
     if (seq !== FL.seq) return;
     if (hit) { var R0 = hit.R; R0.at = { lat: hit.lat, lng: hit.lng }; R0.r = hit.r; R0.final = true; show(R0, hit.at); return; }
     var stateOpt = { state: true, centroidOk: FL.centroidOk, envelope: true, noOrder: true, retry: function () { if (!FL.own) return false; FL.own = false; return true; } };
+    if (!(PERF.on && exp("oldgrid"))) { stateOpt.grid = 0.03; stateOpt.get = true; stateOpt.conc = 6; }
     var stDone = false;
     var state = arcRadius(FL_LAYER, { where: "SALE_YR1>=" + minYear + " AND SALE_PRC1>=1000", outFields: function () { return FL_FIELDS + (FL.own ? FL_OWN : ""); },
       orderByFields: "SALE_YR1 DESC,SALE_MO1 DESC" }, s, qr, function (n) { if (seq === FL.seq && !FL.shownPartial) flStatus("Loading Florida sales within " + qr + " mi… " + fmtInt(n) + " so far"); }, stateOpt)

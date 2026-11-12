@@ -1907,7 +1907,7 @@ var FL_COUNTY = {11:"Alachua",12:"Baker",13:"Bay",14:"Bradford",15:"Brevard",16:
 var FL_FIELDS = "PARCEL_ID,CO_NO,DOR_UC,OWN_NAME,PHY_ADDR1,PHY_CITY,PHY_ZIPCD,ACT_YR_BLT,SALE_PRC1,SALE_YR1,SALE_MO1,QUAL_CD1,VI_CD1";
 var FL_OWN = ",OWN_ADDR1,OWN_CITY,OWN_STATE,OWN_ZIPCD";
 var FL_MAX = 20000;
-var FL = { busy: false, at: null, radius: 0, buyers: [], rows: 0, kept: 0, capped: false, newest: null, err: "", own: true, centroidOk: true, seq: 0, timer: null, srcs: [] };
+var FL = { loads: 0, busy: false, at: null, radius: 0, buyers: [], rows: 0, kept: 0, capped: false, newest: null, err: "", own: true, centroidOk: true, seq: 0, timer: null, srcs: [] };
 function inFlorida(la, lo) { return la >= 24.3 && la <= 31.1 && lo >= -87.7 && lo <= -79.8; }
 /* timings, shown after the record status when the page address has ?perf */
 var PERF = { on: /[?&]perf\b/.test(location.search), req: {}, marks: {}, exp: ((location.search.match(/[?&]exp=([\w,]+)/) || [])[1] || "").split(",") };
@@ -2307,6 +2307,8 @@ function flLoad(force) {
   $("flLoad").disabled = true; updBtns();
   flStatus("Loading Florida sales within " + qr + " mi…");
   var minYear = NOW.getFullYear() - 4, seqOld = PERF.on && exp("seq");
+  // each load starts its own timings (the page's own first load also counts the page opening)
+  if (FL.loads++) { PERF.marks = {}; PERF.req = {}; PERF.stWin = ""; }
   function mark(k) { if (!PERF.marks[k]) PERF.marks[k] = performance.now() - t0; }
   function askCounties(codes) {
     return Promise.all(codes.map(function (code) {

@@ -2205,7 +2205,65 @@ function flOwnCounties(s, qr) {
   });
   return Object.keys(out).map(Number);
 }
+
+/* ?bench=ZIP,miles times several ways of asking the state roll for the same box, one after another, and shows each time and row count in the page title */
+var BENCH = (location.search.match(/[?&]bench=(\d{5}),?([\d.]*)/) || null);
+function flBench() {
+  var c = zipTable().get(BENCH[1]); if (!c) { document.title = "B no zip"; return; }
+  var qr = +BENCH[2] || 1, la = c[0], lo = c[1], dla = qr / 69, dlo = qr / (69 * Math.cos(la * Math.PI / 180));
+  var env = [lo - dlo, la - dla, lo + dlo, la + dla], minYear = NOW.getFullYear() - 4, out = [];
+  function base(x) {
+    var p = { inSR: "4326", outSR: "4326", f: "json", spatialRel: "esriSpatialRelIntersects", geometryType: "esriGeometryEnvelope",
+      geometry: x.env || env.map(function (v) { return v.toFixed(6); }).join(","), where: x.where || ("SALE_YR1>=" + minYear + " AND SALE_PRC1>=1000"),
+      outFields: x.fields || (FL_FIELDS + FL_OWN), resultOffset: "0", resultRecordCount: x.n || "2000" };
+    if (x.centroid !== false) { p.returnGeometry = "false"; p.returnCentroid = "true"; } else p.returnGeometry = "false";
+    for (var k in x.extra || {}) p[k] = x.extra[k];
+    return p;
+  }
+  function one(name, fn) {
+    return function () {
+      var t0 = performance.now();
+      return fn().then(function (n) { out.push(name + " " + ((performance.now() - t0) / 1000).toFixed(1) + "/" + n); },
+        function (e) { out.push(name + " ERR " + ((performance.now() - t0) / 1000).toFixed(1) + " " + String(e && e.message || e).slice(0, 30)); })
+        .then(function () { document.title = "B " + out.join(" | "); var b = $("flStatus"); if (b) { b.hidden = false; b.textContent = document.title; } });
+    };
+  }
+  function cnt(j) { return j.count != null ? j.count : j.objectIds ? j.objectIds.length : (j.features || []).length + (j.exceededTransferLimit ? "+" : ""); }
+  function all(x) { // pages through every row of one box
+    var n = 0; function pg(off) { var p = base(x); p.resultOffset = String(off); return (x.get ? arcGet : arcPost)(FL_LAYER, p).then(function (j) { var g = (j.features || []).length; n += g; if (j.exceededTransferLimit && g) return pg(off + g); return n; }); }
+    return pg(0);
+  }
+  function quads(k) { var r = []; for (var iy = 0; iy < k; iy++) for (var ix = 0; ix < k; ix++) r.push([env[0] + (env[2] - env[0]) * ix / k, env[1] + (env[3] - env[1]) * iy / k, env[0] + (env[2] - env[0]) * (ix + 1) / k, env[1] + (env[3] - env[1]) * (iy + 1) / k].map(function (v) { return v.toFixed(6); }).join(",")); return r; }
+  function par(k, x) { var tot = 0; return Promise.all(quads(k).map(function (e) { var y = {}; for (var q in x) y[q] = x[q]; y.env = e; return all(y).then(function (n) { tot += n; }); })).then(function () { return tot; }); }
+  function byIds(chunk, conc) {
+    var p = base({}); p.returnIdsOnly = "true"; delete p.outFields; delete p.resultOffset; delete p.resultRecordCount; delete p.returnCentroid;
+    return arcPost(FL_LAYER, p).then(function (j) {
+      var ids = j.objectIds || [], parts = [], got = 0, i = 0;
+      for (var a = 0; a < ids.length; a += chunk) parts.push(ids.slice(a, a + chunk));
+      function w() { if (i >= parts.length) return Promise.resolve(); var ch = parts[i++];
+        return arcPost(FL_LAYER, { objectIds: ch.join(","), outFields: FL_FIELDS + FL_OWN, returnGeometry: "false", returnCentroid: "true", outSR: "4326", f: "json" }).then(function (r) { got += (r.features || []).length; }).then(w); }
+      var ws = []; for (var c2 = 0; c2 < conc; c2++) ws.push(w());
+      return Promise.all(ws).then(function () { return got + " of " + ids.length; });
+    });
+  }
+  var list = (((location.search.match(/[?&]bv=([\w,]+)/) || [])[1]) || "count,ids,cur,nocen,few,q2,q3,get,idsP").split(",");
+  var V = {
+    count: one("count", function () { var p = base({}); p.returnCountOnly = "true"; delete p.outFields; return arcPost(FL_LAYER, p).then(cnt); }),
+    ids: one("ids", function () { var p = base({}); p.returnIdsOnly = "true"; delete p.outFields; return arcPost(FL_LAYER, p).then(cnt); }),
+    cur: one("cur", function () { return all({}); }),
+    nocen: one("nocen", function () { return all({ centroid: false }); }),
+    few: one("few", function () { return all({ fields: "PARCEL_ID,CO_NO" }); }),
+    q2: one("q2", function () { return par(2, {}); }),
+    q3: one("q3", function () { return par(3, {}); }),
+    get: one("get", function () { return all({ get: true, extra: { cacheHint: "true" } }); }),
+    get2: one("get2", function () { return all({ get: true, extra: { cacheHint: "true" } }); }),
+    idsP: one("idsP", function () { return byIds(250, 6); }),
+    meta: one("meta", function () { return arcGet(FL_LAYER.replace(/\/query$/, ""), { f: "json" }).then(function (j) { return "max" + j.maxRecordCount + " pbf" + (/pbf/i.test(j.supportedQueryFormats || "") ? 1 : 0) + " std" + (j.advancedQueryCapabilities && j.advancedQueryCapabilities.supportsQueryWithResultType ? 1 : 0) + " ed" + String(j.editingInfo && j.editingInfo.lastEditDate || "").slice(0, 10) + " idx" + (j.indexes || []).map(function (x) { return x.fields; }).join("~").slice(0, 120); }); })
+  };
+  list.reduce(function (pr, k) { return V[k] ? pr.then(V[k]) : pr; }, Promise.resolve()).then(function () { document.title = "B done " + out.join(" | "); });
+}
 function flLoad(force) {
+  if (BENCH) return Promise.resolve();
   var s = S.f.subject;
   if (!s) { flStatus("Set a subject property first: an address, a ZIP, or a pin on the map.", "warn"); return Promise.resolve(); }
   if (!inFlorida(s.lat, s.lng)) { flStatus("Live public records cover Florida only. Move the subject property into Florida.", "warn"); return Promise.resolve(); }
@@ -2953,7 +3011,7 @@ function readFile(f) {
 
 // expose pure pieces for testing
 window.__CBF__ = { readFile: readFile, parseSubject: parseSubject, setSubject: setSubject, setSubjectFromText: setSubjectFromText, compRows: compRows, selectBuyer: selectBuyer, exportComps: exportComps, getMap: function () { return map; }, S: S, Store: Store, compute: compute, parseImport: parseImport, loadCsvText: loadCsvText, IMP: function () { return IMP; }, setImpMap: function (m) { IMP.map = m; }, areaStats: areaStats, mapPoints: mapPoints, countyAt: countyAt, zipCenter: zipCenter, runImport: runImport, setSource: setSource, showTab: showTab, addSelectedTo: addSelectedTo, removeSelected: removeSelected, toCsv: toCsv, exportPurchases: exportPurchases };
-function boot() { init(); window.__PAGE_T__ = performance.now(); }
+function boot() { init(); window.__PAGE_T__ = performance.now(); if (BENCH) setTimeout(flBench, 300); }
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 })();
 

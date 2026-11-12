@@ -2225,7 +2225,7 @@ function flBench() {
       var t0 = performance.now();
       return fn().then(function (n) { out.push(name + " " + ((performance.now() - t0) / 1000).toFixed(1) + "/" + n); },
         function (e) { out.push(name + " ERR " + ((performance.now() - t0) / 1000).toFixed(1) + " " + String(e && e.message || e).slice(0, 30)); })
-        .then(function () { document.title = "B " + out.join(" | "); var b = $("flStatus"); if (b) { b.hidden = false; b.textContent = document.title; } });
+        .then(function () { var b = document.getElementById("benchOut"); if (!b) { b = document.createElement("pre"); b.id = "benchOut"; b.setAttribute("role", "status"); b.style.cssText = "white-space:pre-wrap;margin:8px 16px"; document.body.insertBefore(b, document.body.firstChild); } b.textContent = "BENCH " + out.join("\n"); document.title = "B " + out.length + " done"; });
     };
   }
   function cnt(j) { return j.count != null ? j.count : j.objectIds ? j.objectIds.length : (j.features || []).length + (j.exceededTransferLimit ? "+" : ""); }
@@ -2251,6 +2251,12 @@ function flBench() {
     count: one("count", function () { var p = base({}); p.returnCountOnly = "true"; delete p.outFields; return arcPost(FL_LAYER, p).then(cnt); }),
     ids: one("ids", function () { var p = base({}); p.returnIdsOnly = "true"; delete p.outFields; return arcPost(FL_LAYER, p).then(cnt); }),
     cur: one("cur", function () { return all({}); }),
+    count1: one("count1", function () { var p = base({ where: "1=1" }); p.returnCountOnly = "true"; delete p.outFields; return arcPost(FL_LAYER, p).then(cnt); }),
+    ids1: one("ids1", function () { var p = base({ where: "1=1" }); p.returnIdsOnly = "true"; delete p.outFields; return arcPost(FL_LAYER, p).then(cnt); }),
+    cntco: one("cntco", function () { var p = base({ where: "CO_NO=18 AND SALE_YR1>=" + minYear + " AND SALE_PRC1>=1000" }); p.returnCountOnly = "true"; delete p.outFields; return arcPost(FL_LAYER, p).then(cnt); }),
+    cntyr: one("cntyr", function () { var p = base({ where: "SALE_YR1>=" + minYear }); p.returnCountOnly = "true"; delete p.outFields; return arcPost(FL_LAYER, p).then(cnt); }),
+    cntattr: one("cntattr", function () { return arcPost(FL_LAYER, { where: "CO_NO=18 AND SALE_YR1>=" + minYear + " AND SALE_PRC1>=1000", returnCountOnly: "true", f: "json" }).then(cnt); }),
+    all1: one("all1", function () { return all({ where: "1=1" }); }),
     nocen: one("nocen", function () { return all({ centroid: false }); }),
     few: one("few", function () { return all({ fields: "PARCEL_ID,CO_NO" }); }),
     q2: one("q2", function () { return par(2, {}); }),

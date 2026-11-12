@@ -2262,6 +2262,12 @@ function flBench() {
       return Promise.all(ws).then(function () { return got + " of " + ids.length; });
     });
   }
+  function flBenchRadius(g) {
+    var o = { state: true, centroidOk: true, envelope: true, noOrder: true };
+    if (g) { o.grid = +((location.search.match(/[?&]bg=([\d.]+)/) || [])[1] || 0.03); o.get = true; o.conc = +((location.search.match(/[?&]bc=(\d+)/) || [])[1] || 3); }
+    return arcRadius(FL_LAYER, { where: "SALE_YR1>=" + minYear + " AND SALE_PRC1>=1000", outFields: FL_FIELDS + FL_OWN }, { lat: la, lng: lo }, qr, null, o)
+      .then(function (r) { return r.feats.length + (r.partial ? "p" : "") + (r.capped ? "c" : ""); });
+  }
   var list = (((location.search.match(/[?&]bv=([\w,]+)/) || [])[1]) || "count,ids,cur,nocen,few,q2,q3,get,idsP").split(",");
   var V = {
     count: one("count", function () { var p = base({}); p.returnCountOnly = "true"; delete p.outFields; return arcPost(FL_LAYER, p).then(cnt); }),
@@ -2273,6 +2279,8 @@ function flBench() {
     cntyr: one("cntyr", function () { var p = base({ where: "SALE_YR1>=" + minYear }); p.returnCountOnly = "true"; delete p.outFields; return arcPost(FL_LAYER, p).then(cnt); }),
     cntattr: one("cntattr", function () { return arcPost(FL_LAYER, { where: "CO_NO=18 AND SALE_YR1>=" + minYear + " AND SALE_PRC1>=1000", returnCountOnly: "true", f: "json" }).then(cnt); }),
     all1: one("all1", function () { return all({ where: "1=1" }); }),
+    grid: one("grid", function () { return flBenchRadius(true); }),
+    old: one("old", function () { return flBenchRadius(false); }),
     curyr: one("curyr", function () { var w = "SALE_YR1>=" + minYear; return all({ where: w }); }),
     cntco2: one("cntco2", function () { var p = base({ where: "CO_NO=18 AND SALE_YR1>=" + minYear }); p.returnCountOnly = "true"; delete p.outFields; return arcPost(FL_LAYER, p).then(cnt); }),
     nocen: one("nocen", function () { return all({ centroid: false }); }),

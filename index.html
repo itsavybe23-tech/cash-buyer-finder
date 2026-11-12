@@ -2257,6 +2257,8 @@ function flBench() {
     cntyr: one("cntyr", function () { var p = base({ where: "SALE_YR1>=" + minYear }); p.returnCountOnly = "true"; delete p.outFields; return arcPost(FL_LAYER, p).then(cnt); }),
     cntattr: one("cntattr", function () { return arcPost(FL_LAYER, { where: "CO_NO=18 AND SALE_YR1>=" + minYear + " AND SALE_PRC1>=1000", returnCountOnly: "true", f: "json" }).then(cnt); }),
     all1: one("all1", function () { return all({ where: "1=1" }); }),
+    curyr: one("curyr", function () { var w = "SALE_YR1>=" + minYear; return all({ where: w }); }),
+    cntco2: one("cntco2", function () { var p = base({ where: "CO_NO=18 AND SALE_YR1>=" + minYear }); p.returnCountOnly = "true"; delete p.outFields; return arcPost(FL_LAYER, p).then(cnt); }),
     nocen: one("nocen", function () { return all({ centroid: false }); }),
     few: one("few", function () { return all({ fields: "PARCEL_ID,CO_NO" }); }),
     q2: one("q2", function () { return par(2, {}); }),
